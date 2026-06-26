@@ -1,66 +1,187 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+
+export default function Dashboard() {
+  const [stats, setStats] = useState({
+    channelsCount: 0,
+    totalPosts: 0,
+    pendingCount: 0,
+    processingCount: 0,
+    successCount: 0,
+    failedCount: 0
+  });
+  const [recentPosts, setRecentPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Hàm tải dữ liệu
+  const fetchData = async () => {
+    try {
+      // Tải danh sách kênh
+      const accRes = await fetch('/api/accounts');
+      const accData = await accRes.json();
+      const accounts = accData.accounts || [];
+
+      // Tải danh sách bài đăng (API này cũng tự động trigger đăng bài đến lịch hẹn)
+      const postRes = await fetch('/api/posts');
+      const postData = await postRes.json();
+      const posts = postData.posts || [];
+
+      // Tính toán thống kê
+      const pending = posts.filter(p => p.status === 'pending').length;
+      const processing = posts.filter(p => p.status === 'processing').length;
+      const success = posts.filter(p => p.status === 'success').length;
+      const failed = posts.filter(p => p.status === 'failed').length;
+
+      setStats({
+        channelsCount: accounts.length,
+        totalPosts: posts.length,
+        pendingCount: pending,
+        processingCount: processing,
+        successCount: success,
+        failedCount: failed
+      });
+      
+      setRecentPosts(posts.slice(0, 5)); // Lấy 5 bài mới nhất
+      setLoading(false);
+    } catch (error) {
+      console.error('Lỗi tải dữ liệu dashboard:', error);
+    }
+  };
+
+  // Tự động cập nhật sau mỗi 5 giây để cập nhật trạng thái upload ngầm
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          <div style={{ width: '40px', height: '40px', border: '3px solid rgba(254, 44, 85, 0.2)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Đang tải dữ liệu dashboard...</span>
+        </div>
+        <style jsx>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.js file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div>
+      <div style={{ marginBottom: '32px' }}>
+        <h1 style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '8px' }}>
+          Hệ Thống <span className="gradient-text">TikTok AutoPoster</span>
+        </h1>
+        <p style={{ color: 'var(--text-muted)' }}>
+          Chào mừng trở lại. Xem trạng thái hoạt động của các kênh TikTok và tiến trình đăng clip tại đây.
+        </p>
+      </div>
+
+      {/* Grid thống kê */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+        <div className="glass-card" style={{ borderLeft: '4px solid var(--secondary)' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>TÀI KHOẢN TIKTOK</span>
+          <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: '#fff' }}>
+            {stats.channelsCount}
+          </div>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <div className="glass-card" style={{ borderLeft: '4px solid var(--warning)' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>ĐANG HẸN GIỜ (PENDING)</span>
+          <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: '#fff' }}>
+            {stats.pendingCount}
+          </div>
         </div>
-      </main>
+
+        <div className="glass-card" style={{ borderLeft: '4px solid var(--accent)' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>ĐANG ĐĂNG (PROCESSING)</span>
+          <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: '#fff' }}>
+            {stats.processingCount}
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ borderLeft: '4px solid #10B981' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>ĐĂNG THÀNH CÔNG</span>
+          <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: '#10B981' }}>
+            {stats.successCount}
+          </div>
+        </div>
+
+        <div className="glass-card" style={{ borderLeft: '4px solid var(--danger)' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>THẤT BẠI</span>
+          <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: 'var(--danger)' }}>
+            {stats.failedCount}
+          </div>
+        </div>
+      </div>
+
+      {/* Lịch sử hoạt động gần đây */}
+      <div className="glass-card">
+        <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Lịch Sử Đăng Bài Gần Đây</h3>
+        </div>
+
+        {recentPosts.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '12px', opacity: 0.5 }}>
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="9" y1="9" x2="15" y2="9"></line>
+              <line x1="9" y1="13" x2="15" y2="13"></line>
+              <line x1="9" y1="17" x2="11" y2="17"></line>
+            </svg>
+            <p>Chưa có lịch sử đăng bài nào được lưu.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', color: 'var(--text-muted)' }}>
+                  <th style={{ padding: '12px 16px', fontSize: '0.85rem' }}>Mã bài đăng</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.85rem' }}>Kênh</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.85rem' }}>Caption</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.85rem' }}>Lịch hẹn / Đăng lúc</th>
+                  <th style={{ padding: '12px 16px', fontSize: '0.85rem' }}>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentPosts.map((post) => (
+                  <tr key={post.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                    <td style={{ padding: '16px', fontWeight: 600, fontSize: '0.9rem' }}>{post.id}</td>
+                    <td style={{ padding: '16px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontWeight: 600 }}>{post.accountLabel}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{post.accountUsername}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem' }}>
+                      {post.caption}
+                    </td>
+                    <td style={{ padding: '16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                      {post.status === 'success' 
+                        ? new Date(post.postedAt).toLocaleString('vi-VN') 
+                        : new Date(post.scheduledAt).toLocaleString('vi-VN')}
+                    </td>
+                    <td style={{ padding: '16px' }}>
+                      <span className={`badge badge-${post.status}`}>
+                        {post.status === 'pending' && 'Hẹn giờ'}
+                        {post.status === 'processing' && 'Đang tải lên...'}
+                        {post.status === 'success' && 'Thành công'}
+                        {post.status === 'failed' && 'Lỗi'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
