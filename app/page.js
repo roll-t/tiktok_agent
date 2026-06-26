@@ -89,10 +89,10 @@ export default function Dashboard() {
     <div>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '8px' }}>
-          Hệ Thống <span className="gradient-text">AutoPoster Đa Kênh</span>
+          Hệ Thống <span className="gradient-text">AutoPoster YouTube Shorts</span>
         </h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Chào mừng trở lại. Xem trạng thái hoạt động của các kênh TikTok & YouTube Shorts và tiến trình đăng bài tại đây.
+          Chào mừng trở lại. Xem trạng thái hoạt động của các kênh YouTube Shorts và tiến trình đăng bài tại đây.
         </p>
       </div>
 

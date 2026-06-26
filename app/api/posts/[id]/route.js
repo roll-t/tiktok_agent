@@ -6,7 +6,7 @@ import path from 'path';
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
-    const db = readDb();
+    const db = await readDb();
     
     const postIndex = db.posts.findIndex(p => p.id === id);
     if (postIndex === -1) {
@@ -33,7 +33,7 @@ export async function DELETE(request, { params }) {
       }
     }
 
-    writeDb(db);
+    await writeDb(db);
 
     return NextResponse.json({ success: true, message: 'Đã xóa bài đăng thành công.' });
   } catch (error) {

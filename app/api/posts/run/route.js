@@ -9,7 +9,7 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Thiếu postId.' }, { status: 400 });
     }
 
-    const db = readDb();
+    const db = await readDb();
     const post = db.posts.find(p => p.id === postId);
     if (!post) {
       return NextResponse.json({ error: 'Không tìm thấy bài viết.' }, { status: 404 });
@@ -18,7 +18,7 @@ export async function POST(request) {
     // Đánh dấu sang processing và ghi lại db
     post.status = 'processing';
     post.error = null;
-    writeDb(db);
+    await writeDb(db);
 
     console.log(`[API Posts Run] Đang kích hoạt chạy thủ công ngay lập tức cho bài viết: ${postId}`);
     runUploadInBackground(postId).catch(err => {

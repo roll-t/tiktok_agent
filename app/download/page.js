@@ -159,10 +159,10 @@ export default function DownloadPage() {
     <div>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '8px' }}>
-          Tải TikTok & <span className="gradient-text">Reup Đa Kênh</span>
+          Tải TikTok & <span className="gradient-text">Reup YouTube Shorts</span>
         </h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Tải video TikTok không logo (watermark) tự động và đăng hoặc lên lịch trực tiếp lên các kênh của bạn.
+          Tải video TikTok không logo (watermark) tự động và đăng hoặc lên lịch trực tiếp lên các kênh YouTube Shorts.
         </p>
       </div>
 
@@ -175,15 +175,88 @@ export default function DownloadPage() {
           <form onSubmit={handleDownload}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
               <label className="form-label">Link video TikTok (Hỗ trợ cả link dạng vt.tiktok.com và www.tiktok.com)</label>
-              <input
-                type="url"
-                className="form-control"
-                placeholder="https://www.tiktok.com/@username/video/..."
-                value={tiktokUrl}
-                onChange={(e) => setTiktokUrl(e.target.value)}
-                disabled={isDownloading || isScheduling}
-                required
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="url"
+                  className="form-control"
+                  placeholder="https://www.tiktok.com/@username/video/..."
+                  value={tiktokUrl}
+                  onChange={(e) => setTiktokUrl(e.target.value)}
+                  disabled={isDownloading || isScheduling}
+                  required
+                  style={{ paddingRight: '76px' }}
+                />
+                {/* Icon Paste từ clipboard */}
+                <button
+                  type="button"
+                  title="Dán link từ clipboard"
+                  disabled={isDownloading || isScheduling}
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text && text.trim()) {
+                        setTiktokUrl(text.trim());
+                      }
+                    } catch (err) {
+                      console.error('Không thể đọc clipboard:', err);
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '40px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: isDownloading || isScheduling ? 'not-allowed' : 'pointer',
+                    padding: '6px',
+                    color: tiktokUrl ? 'var(--secondary)' : 'rgba(255,255,255,0.3)',
+                    opacity: isDownloading || isScheduling ? 0.4 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: '0.2s',
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={e => { if (!isDownloading && !isScheduling) e.currentTarget.style.color = 'var(--secondary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = tiktokUrl ? 'var(--secondary)' : 'rgba(255,255,255,0.3)'; e.currentTarget.style.background = 'none'; }}
+                >
+                  {/* Clipboard paste icon */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                    <line x1="9" y1="12" x2="15" y2="12"/>
+                    <line x1="9" y1="16" x2="13" y2="16"/>
+                  </svg>
+                </button>
+                {/* Icon Clear - xóa nội dung ô input */}
+                <button
+                  type="button"
+                  title="Xóa nội dung"
+                  disabled={isDownloading || isScheduling || !tiktokUrl}
+                  onClick={() => setTiktokUrl('')}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: (!tiktokUrl || isDownloading || isScheduling) ? 'not-allowed' : 'pointer',
+                    padding: '6px',
+                    color: tiktokUrl ? 'rgba(255,71,87,0.7)' : 'rgba(255,255,255,0.2)',
+                    opacity: (!tiktokUrl || isDownloading || isScheduling) ? 0.35 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: '0.2s',
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={e => { if (tiktokUrl && !isDownloading && !isScheduling) { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'rgba(255,71,87,0.1)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.color = tiktokUrl ? 'rgba(255,71,87,0.7)' : 'rgba(255,255,255,0.2)'; e.currentTarget.style.background = 'none'; }}
+                >
+                  {/* X circle icon */}
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {error && (
@@ -321,7 +394,7 @@ export default function DownloadPage() {
             {accounts.length === 0 ? (
               <div style={{ padding: '20px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '12px' }}>
-                  Bạn chưa liên kết tài khoản TikTok hoặc YouTube nào để đăng clip.
+                  Bạn chưa liên kết tài khoản YouTube Shorts nào để đăng clip.
                 </p>
                 <button 
                   onClick={() => router.push('/accounts')}
@@ -345,7 +418,7 @@ export default function DownloadPage() {
                   >
                     {accounts.map(acc => (
                       <option key={acc.id} value={acc.id}>
-                        [{acc.platform === 'youtube' ? 'YouTube' : 'TikTok'}] {acc.label} ({acc.platform === 'youtube' ? '' : '@'}{acc.username}) [{acc.type === 'adspower' ? 'AdsPower' : 'Mặc định'}]
+                        {acc.label} ({acc.username}) [{acc.type === 'adspower' ? 'AdsPower' : 'Mặc định'}]
                       </option>
                     ))}
                   </select>

@@ -6,7 +6,7 @@ import path from 'path';
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
-    const db = readDb();
+    const db = await readDb();
     
     // Tìm tài khoản
     const accountIndex = db.accounts.findIndex(a => a.id === id);
@@ -35,7 +35,7 @@ export async function DELETE(request, { params }) {
     // Để cho sạch sẽ, chúng ta sẽ xóa các bài đăng chưa tải lên của kênh này
     db.posts = db.posts.filter(p => !(p.accountId === id && p.status === 'pending'));
 
-    writeDb(db);
+    await writeDb(db);
 
     return NextResponse.json({ success: true, message: 'Đã xóa tài khoản thành công.' });
   } catch (error) {
@@ -47,8 +47,8 @@ export async function DELETE(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const { id } = await params;
-    const { label, username, profileId, cookie, avatar } = await request.json();
-    const db = readDb();
+    const { label, username, videoType, avatar } = await request.json();
+    const db = await readDb();
     
     const accountIndex = db.accounts.findIndex(a => a.id === id);
     if (accountIndex === -1) {
@@ -63,17 +63,10 @@ export async function PUT(request, { params }) {
       const cleanUsername = username.trim().startsWith('@') ? username.trim().slice(1) : username.trim();
       account.username = cleanUsername;
     }
-    if (profileId !== undefined) account.profileId = profileId.trim();
+    if (videoType !== undefined) account.videoType = videoType;
     if (avatar !== undefined) account.avatar = avatar;
 
-    // Cập nhật cookie (nếu có và tài khoản là dạng local/cookie)
-    if (cookie !== undefined && cookie.trim()) {
-      const { createSessionWithCookie } = await import('@/lib/poster.js');
-      createSessionWithCookie(id, cookie.trim());
-      account.sessionFile = `${id}.json`;
-    }
-
-    writeDb(db);
+    await writeDb(db);
 
     return NextResponse.json({ success: true, message: 'Cập nhật tài khoản thành công.', account });
   } catch (error) {

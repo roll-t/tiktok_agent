@@ -12,12 +12,14 @@ export default function PostsPage() {
   const [caption, setCaption] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [videoFile, setVideoFile] = useState(null);
+  const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState(null);
+  const [videoType, setVideoType] = useState('shorts'); // 'shorts' hoặc 'video'
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadPercent, setUploadPercent] = useState(0);
   const [formError, setFormError] = useState('');
   const [activeTab, setActiveTab] = useState('queue'); // 'queue' hoặc 'history'
-  const [filterPlatform, setFilterPlatform] = useState('all');
   const [filterAccountId, setFilterAccountId] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortByTime, setSortByTime] = useState('newest'); // 'newest' hoặc 'oldest'
@@ -26,6 +28,7 @@ export default function PostsPage() {
   const itemsPerPage = 10;
 
   const fileInputRef = useRef(null);
+  const thumbnailInputRef = useRef(null);
   const postsRef = useRef([]);
 
   const addToast = (title, message, type = 'success') => {
@@ -64,27 +67,27 @@ export default function PostsPage() {
         newPosts.forEach(post => {
           const prevStatus = prevMap.get(post.id);
           if (prevStatus === 'processing' && (post.status === 'success' || post.status === 'failed')) {
-            const platformName = post.platform === 'youtube' ? 'YouTube Shorts' : 'TikTok';
-            const channelInfo = `${post.accountLabel} (${post.platform === 'youtube' ? '' : '@'}${post.accountUsername})`;
+            const typeLabel = post.videoType === 'video' ? 'YouTube Thường' : 'YouTube Shorts';
+            const channelInfo = `${post.accountLabel} (${post.accountUsername})`;
 
             if (post.status === 'success') {
               addToast(
-                `Đăng thành công [${platformName}]`,
+                `Đăng thành công [${typeLabel}]`,
                 `Kênh ${channelInfo} đã xuất bản thành công bài đăng ${post.id}.`,
                 'success'
               );
               showSystemNotification(
-                `Đăng thành công [${platformName}]`,
+                `Đăng thành công [${typeLabel}]`,
                 `Bài đăng ${post.id} trên kênh ${channelInfo} đã được xuất bản thành công!`
               );
             } else {
               addToast(
-                `Đăng thất bại [${platformName}]`,
+                `Đăng thất bại [${typeLabel}]`,
                 `Lỗi: ${post.error || 'Lỗi không xác định.'} (${post.id})`,
                 'danger'
               );
               showSystemNotification(
-                `Lỗi đăng bài [${platformName}]`,
+                `Lỗi đăng bài [${typeLabel}]`,
                 `Bài đăng ${post.id} trên kênh ${channelInfo} thất bại: ${post.error || 'Lỗi không xác định.'}`
               );
             }
@@ -116,7 +119,17 @@ export default function PostsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, filterPlatform, filterAccountId, filterStatus]);
+  }, [activeTab, filterAccountId, filterStatus]);
+
+  // Khi chọn tài khoản -> lấy videoType mặc định của kênh đó
+  useEffect(() => {
+    if (selectedAccountId) {
+      const acc = accounts.find(a => a.id === selectedAccountId);
+      if (acc && acc.videoType) {
+        setVideoType(acc.videoType);
+      }
+    }
+  }, [selectedAccountId, accounts]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -144,6 +157,23 @@ export default function PostsPage() {
     }
   };
 
+  const handleThumbnailChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setThumbnailFile(file);
+      // Tạo preview
+      const reader = new FileReader();
+      reader.onload = (ev) => setThumbnailPreview(ev.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeThumbnail = () => {
+    setThumbnailFile(null);
+    setThumbnailPreview(null);
+    if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -164,6 +194,10 @@ export default function PostsPage() {
     formData.append('video', videoFile);
     formData.append('accountId', selectedAccountId);
     formData.append('caption', caption);
+    formData.append('videoType', videoType);
+    if (thumbnailFile) {
+      formData.append('thumbnail', thumbnailFile);
+    }
     if (scheduledAt) {
       formData.append('scheduledAt', new Date(scheduledAt).toISOString());
     }
@@ -200,7 +234,10 @@ export default function PostsPage() {
       setCaption('');
       setScheduledAt('');
       setVideoFile(null);
+      setThumbnailFile(null);
+      setThumbnailPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
+      if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
 
       fetchData();
     } catch (error) {
@@ -259,10 +296,9 @@ export default function PostsPage() {
 
   const filteredPosts = tabPosts
     .filter(post => {
-      const matchesPlatform = filterPlatform === 'all' || post.platform === filterPlatform;
       const matchesAccount = filterAccountId === 'all' || post.accountId === filterAccountId;
       const matchesStatus = filterStatus === 'all' || post.status === filterStatus;
-      return matchesPlatform && matchesAccount && matchesStatus;
+      return matchesAccount && matchesStatus;
     })
     .sort((a, b) => {
       const timeA = new Date(a.postedAt || a.scheduledAt || a.createdAt);
@@ -282,7 +318,7 @@ export default function PostsPage() {
           Đăng Clip & <span className="gradient-text">Hẹn Giờ Lên Lịch</span>
         </h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Thiết lập nội dung, chọn kênh đăng và hẹn giờ đăng tải video tự động lên TikTok hoặc YouTube Shorts.
+          Thiết lập nội dung, chọn kênh đăng và hẹn giờ đăng tải video tự động lên YouTube.
         </p>
       </div>
 
@@ -305,10 +341,41 @@ export default function PostsPage() {
                 <option value="">-- Chọn kênh đăng bài --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    [{acc.platform === 'youtube' ? 'YouTube' : 'TikTok'}] {acc.label} ({acc.platform === 'youtube' ? '' : '@'}{acc.username})
+                    {acc.label} ({acc.username})
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Loại video */}
+            <div className="form-group">
+              <label className="form-label">Loại video</label>
+              <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <button
+                  type="button"
+                  onClick={() => setVideoType('shorts')}
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: '6px', border: 'none',
+                    background: videoType === 'shorts' ? 'var(--primary)' : 'transparent',
+                    color: '#fff', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: '0.2s'
+                  }}
+                  disabled={isSubmitting}
+                >
+                  YouTube Shorts
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVideoType('video')}
+                  style={{
+                    flex: 1, padding: '8px 12px', borderRadius: '6px', border: 'none',
+                    background: videoType === 'video' ? 'var(--primary)' : 'transparent',
+                    color: '#fff', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', transition: '0.2s'
+                  }}
+                  disabled={isSubmitting}
+                >
+                  YouTube Thường
+                </button>
+              </div>
             </div>
 
             <div className="form-group">
@@ -321,6 +388,81 @@ export default function PostsPage() {
                 disabled={isSubmitting}
                 ref={fileInputRef}
                 required
+              />
+            </div>
+
+            {/* Thumbnail (ảnh thu nhỏ) */}
+            <div className="form-group">
+              <label className="form-label">
+                Ảnh Thu Nhỏ / Thumbnail
+                {videoType === 'shorts' && (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '6px', fontWeight: 400 }}>
+                    (Không bắt buộc với Shorts)
+                  </span>
+                )}
+              </label>
+
+              {thumbnailPreview ? (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img
+                    src={thumbnailPreview}
+                    alt="Thumbnail Preview"
+                    style={{
+                      width: '100%',
+                      maxHeight: '120px',
+                      objectFit: 'cover',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      display: 'block'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={removeThumbnail}
+                    style={{
+                      position: 'absolute', top: '6px', right: '6px',
+                      background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
+                      width: '24px', height: '24px', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', cursor: 'pointer', color: '#fff', fontSize: '14px'
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => !isSubmitting && thumbnailInputRef.current?.click()}
+                  style={{
+                    border: '2px dashed rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    background: 'rgba(255,255,255,0.02)',
+                    transition: '0.2s'
+                  }}
+                >
+                  {/* Camera icon */}
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.45 }}>
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                  </svg>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Nhấn để chọn ảnh thumbnail
+                  </span>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                ref={thumbnailInputRef}
+                onChange={handleThumbnailChange}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -452,21 +594,6 @@ export default function PostsPage() {
 
           {/* Bộ lọc bài viết */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginBottom: '20px', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nền tảng:</span>
-              <select
-                value={filterPlatform}
-                onChange={(e) => {
-                  setFilterPlatform(e.target.value);
-                  setFilterAccountId('all'); // Reset filter tài khoản khi đổi nền tảng
-                }}
-                style={{ background: 'var(--card-bg)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', outline: 'none' }}
-              >
-                <option value="all">Tất cả</option>
-                <option value="tiktok">TikTok</option>
-                <option value="youtube">YouTube Shorts</option>
-              </select>
-            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Kênh đăng:</span>
@@ -476,14 +603,11 @@ export default function PostsPage() {
                 style={{ background: 'var(--card-bg)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '6px', fontSize: '0.85rem', outline: 'none' }}
               >
                 <option value="all">Tất cả kênh</option>
-                {accounts
-                  .filter(acc => filterPlatform === 'all' || acc.platform === filterPlatform)
-                  .map(acc => (
-                    <option key={acc.id} value={acc.id}>
-                      [{acc.platform === 'youtube' ? 'YouTube' : 'TikTok'}] {acc.label}
-                    </option>
-                  ))
-                }
+                {accounts.map(acc => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -521,10 +645,9 @@ export default function PostsPage() {
               </select>
             </div>
 
-            {(filterPlatform !== 'all' || filterAccountId !== 'all' || filterStatus !== 'all' || sortByTime !== 'newest') && (
+            {(filterAccountId !== 'all' || filterStatus !== 'all' || sortByTime !== 'newest') && (
               <button
                 onClick={() => {
-                  setFilterPlatform('all');
                   setFilterAccountId('all');
                   setFilterStatus('all');
                   setSortByTime('newest');
@@ -565,19 +688,19 @@ export default function PostsPage() {
                   {/* Top Bar */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="badge" style={{
-                        background: post.platform === 'youtube' ? 'rgba(255, 71, 87, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                        color: post.platform === 'youtube' ? '#ff4757' : '#fff',
-                        border: post.platform === 'youtube' ? '1px solid rgba(255, 71, 87, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
-                        padding: '2px 6px',
-                        fontSize: '0.7rem'
-                      }}>
-                        {post.platform === 'youtube' ? 'YouTube' : 'TikTok'}
-                      </span>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>{post.id}</span>
                       <span>•</span>
                       <strong style={{ fontSize: '0.9rem', color: '#fff' }}>{post.accountLabel}</strong>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({post.platform === 'youtube' ? '' : '@'}{post.accountUsername})</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>({post.accountUsername})</span>
+                      {/* Badge loại video */}
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: '99px',
+                        background: (post.videoType || 'shorts') === 'shorts' ? 'rgba(255,0,0,0.15)' : 'rgba(37,244,238,0.1)',
+                        color: (post.videoType || 'shorts') === 'shorts' ? '#ff4444' : 'var(--secondary)',
+                        border: (post.videoType || 'shorts') === 'shorts' ? '1px solid rgba(255,0,0,0.2)' : '1px solid rgba(37,244,238,0.15)'
+                      }}>
+                        {(post.videoType || 'shorts') === 'shorts' ? 'Shorts' : 'Video'}
+                      </span>
                     </div>
 
                     <span className={`badge badge-${post.status}`}>
@@ -590,6 +713,15 @@ export default function PostsPage() {
 
                   {/* Caption & Video Info */}
                   <div style={{ display: 'flex', gap: '16px', background: 'rgba(0,0,0,0.1)', padding: '10px', borderRadius: '8px' }}>
+                    {/* Thumbnail preview nếu có */}
+                    {post.thumbnailFilename && (
+                      <img
+                        src={`/api/thumbnail/${post.thumbnailFilename}`}
+                        alt="thumbnail"
+                        style={{ width: '72px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: '0.9rem', color: 'var(--text-main)', lineHeight: 1.4, whiteSpace: 'pre-line' }}>{post.caption}</p>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
@@ -609,6 +741,66 @@ export default function PostsPage() {
                     </div>
 
                     <div style={{ display: 'flex', gap: '10px' }}>
+                      {/* Nút xem video sau khi đăng thành công */}
+                      {post.status === 'success' && post.videoUrl && (
+                        <a
+                          href={post.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            background: 'rgba(255, 0, 0, 0.15)',
+                            color: '#ff4444',
+                            border: '1px solid rgba(255,0,0,0.25)',
+                            textDecoration: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontWeight: 600,
+                            transition: '0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,0,0,0.25)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,0,0,0.15)'}
+                        >
+                          {/* YouTube icon */}
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                          </svg>
+                          Xem video
+                        </a>
+                      )}
+                      {/* Fallback: Không có URL trực tiếp → tìm kiếm trên YouTube Studio */}
+                      {post.status === 'success' && !post.videoUrl && (
+                        <a
+                          href="https://studio.youtube.com/channel/UC/videos"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '0.75rem',
+                            borderRadius: '6px',
+                            background: 'rgba(255,255,255,0.06)',
+                            color: 'var(--text-muted)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            textDecoration: 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            transition: '0.2s'
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                          </svg>
+                          YouTube Studio
+                        </a>
+                      )}
                       {(post.status === 'pending' || post.status === 'failed') && (
                         <button
                           onClick={() => handleRunNow(post.id)}
@@ -629,6 +821,7 @@ export default function PostsPage() {
                       )}
                     </div>
                   </div>
+
 
                   {/* Error display */}
                   {post.status === 'failed' && post.error && (

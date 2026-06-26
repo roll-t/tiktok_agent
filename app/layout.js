@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "TikTok AutoPoster - Quản Lý Kênh & Đăng Clip Tự Động",
-  description: "Hệ thống quản lý và tự động đăng video TikTok đa tài khoản chuyên nghiệp.",
+  title: "YouTube Shorts AutoPoster - Quản Lý Kênh & Đăng Clip Tự Động",
+  description: "Hệ thống quản lý và tự động đăng video YouTube Shorts chuyên nghiệp.",
 };
 
 export default function RootLayout({ children }) {
