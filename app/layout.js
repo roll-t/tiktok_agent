@@ -20,7 +20,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="vi" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         <div className="main-layout">
           <SidebarNav />
           <main className="main-content">

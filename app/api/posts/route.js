@@ -33,12 +33,16 @@ export async function POST(request) {
   try {
     const formData = await request.formData();
     const videoFile = formData.get('video');
+    const existingFilename = formData.get('videoFilename');
     const caption = formData.get('caption') || '';
     const accountId = formData.get('accountId');
     const scheduledAt = formData.get('scheduledAt');
 
-    if (!videoFile || !accountId) {
+    if (!videoFile && !existingFilename) {
       return NextResponse.json({ error: 'Thiếu file video hoặc tài khoản đăng.' }, { status: 400 });
+    }
+    if (!accountId) {
+      return NextResponse.json({ error: 'Thiếu tài khoản đăng.' }, { status: 400 });
     }
 
     const db = readDb();
@@ -47,16 +51,22 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Tài khoản chọn không hợp lệ.' }, { status: 400 });
     }
 
-    // Đọc buffer của video và lưu vào data/uploads
-    const bytes = await videoFile.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    
-    const ext = path.extname(videoFile.name) || '.mp4';
-    const videoFilename = `${Date.now()}_${Math.random().toString(36).substr(2, 5)}${ext}`;
-    const videoFilePath = path.join(getUploadsDir(), videoFilename);
-    
-    fs.writeFileSync(videoFilePath, buffer);
-    console.log(`[API Posts] Đã lưu video thành công tại: ${videoFilePath}`);
+    let videoFilename = existingFilename;
+
+    if (videoFile) {
+      // Đọc buffer của video và lưu vào data/uploads nếu người dùng tải tệp trực tiếp lên
+      const bytes = await videoFile.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      
+      const ext = path.extname(videoFile.name) || '.mp4';
+      videoFilename = `${Date.now()}_${Math.random().toString(36).substr(2, 5)}${ext}`;
+      const videoFilePath = path.join(getUploadsDir(), videoFilename);
+      
+      fs.writeFileSync(videoFilePath, buffer);
+      console.log(`[API Posts] Đã lưu video thành công tại: ${videoFilePath}`);
+    } else {
+      console.log(`[API Posts] Sử dụng video đã lưu trên máy chủ: ${videoFilename}`);
+    }
 
     const postId = `post_${Date.now()}`;
     const newPost = {
@@ -64,6 +74,7 @@ export async function POST(request) {
       accountId: accountId,
       accountLabel: account.label,
       accountUsername: account.username,
+      platform: account.platform || 'tiktok',
       videoFilename: videoFilename,
       caption: caption,
       status: 'pending', // pending, processing, success, failed

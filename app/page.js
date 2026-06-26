@@ -12,6 +12,7 @@ export default function Dashboard() {
     failedCount: 0
   });
   const [recentPosts, setRecentPosts] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
 
   // Hàm tải dữ liệu
@@ -41,8 +42,14 @@ export default function Dashboard() {
         successCount: success,
         failedCount: failed
       });
-      
-      setRecentPosts(posts.slice(0, 5)); // Lấy 5 bài mới nhất
+
+      // Sắp xếp bài đăng theo thời gian mới nhất
+      const sortedPosts = [...posts].sort((a, b) => {
+        const timeA = new Date(a.postedAt || a.scheduledAt || a.createdAt);
+        const timeB = new Date(b.postedAt || b.scheduledAt || b.createdAt);
+        return timeB - timeA;
+      });
+      setRecentPosts(sortedPosts);
       setLoading(false);
     } catch (error) {
       console.error('Lỗi tải dữ liệu dashboard:', error);
@@ -55,6 +62,12 @@ export default function Dashboard() {
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const itemsPerPage = 10;
+  const totalItems = recentPosts.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPosts = recentPosts.slice(startIndex, startIndex + itemsPerPage);
 
   if (loading) {
     return (
@@ -76,17 +89,17 @@ export default function Dashboard() {
     <div>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '2.2rem', fontWeight: 800, marginBottom: '8px' }}>
-          Hệ Thống <span className="gradient-text">TikTok AutoPoster</span>
+          Hệ Thống <span className="gradient-text">AutoPoster Đa Kênh</span>
         </h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Chào mừng trở lại. Xem trạng thái hoạt động của các kênh TikTok và tiến trình đăng clip tại đây.
+          Chào mừng trở lại. Xem trạng thái hoạt động của các kênh TikTok & YouTube Shorts và tiến trình đăng bài tại đây.
         </p>
       </div>
 
       {/* Grid thống kê */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
         <div className="glass-card" style={{ borderLeft: '4px solid var(--secondary)' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>TÀI KHOẢN TIKTOK</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, uppercase: 'true' }}>KÊNH ĐÃ LIÊN KẾT</span>
           <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: '#fff' }}>
             {stats.channelsCount}
           </div>
@@ -123,8 +136,33 @@ export default function Dashboard() {
 
       {/* Lịch sử hoạt động gần đây */}
       <div className="glass-card">
-        <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center', marginBottom: '20px' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Lịch Sử Đăng Bài Gần Đây</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Lịch Sử Đăng Bài Gần Đây ({totalItems})</h3>
+
+          {/* Điều khiển phân trang hàng đầu (Góc trên cùng bên phải) */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px', opacity: currentPage === 1 ? 0.4 : 1 }}
+              >
+                ◀
+              </button>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                Trang {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="btn btn-secondary"
+                style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px', opacity: currentPage === totalPages ? 0.4 : 1 }}
+              >
+                ▶
+              </button>
+            </div>
+          )}
         </div>
 
         {recentPosts.length === 0 ? (
@@ -150,21 +188,32 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {recentPosts.map((post) => (
+                {paginatedPosts.map((post) => (
                   <tr key={post.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                     <td style={{ padding: '16px', fontWeight: 600, fontSize: '0.9rem' }}>{post.id}</td>
                     <td style={{ padding: '16px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ fontWeight: 600 }}>{post.accountLabel}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>@{post.accountUsername}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="badge" style={{
+                            background: post.platform === 'youtube' ? 'rgba(255, 71, 87, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                            color: post.platform === 'youtube' ? '#ff4757' : '#fff',
+                            border: post.platform === 'youtube' ? '1px solid rgba(255, 71, 87, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+                            padding: '1px 4px',
+                            fontSize: '0.65rem'
+                          }}>
+                            {post.platform === 'youtube' ? 'YT' : 'TT'}
+                          </span>
+                          <span style={{ fontWeight: 600 }}>{post.accountLabel}</span>
+                        </div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{post.platform === 'youtube' ? '' : '@'}{post.accountUsername}</span>
                       </div>
                     </td>
                     <td style={{ padding: '16px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.9rem' }}>
                       {post.caption}
                     </td>
                     <td style={{ padding: '16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      {post.status === 'success' 
-                        ? new Date(post.postedAt).toLocaleString('vi-VN') 
+                      {post.status === 'success'
+                        ? new Date(post.postedAt).toLocaleString('vi-VN')
                         : new Date(post.scheduledAt).toLocaleString('vi-VN')}
                     </td>
                     <td style={{ padding: '16px' }}>
@@ -179,6 +228,49 @@ export default function Dashboard() {
                 ))}
               </tbody>
             </table>
+
+            {/* Điều khiển phân trang hàng dưới */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '6px', opacity: currentPage === 1 ? 0.4 : 1 }}
+                >
+                  ◀ Trước
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    style={{
+                      padding: '6px 12px',
+                      fontSize: '0.8rem',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: currentPage === page ? 'linear-gradient(135deg, var(--secondary), var(--primary))' : 'rgba(255,255,255,0.02)',
+                      color: '#fff',
+                      fontWeight: currentPage === page ? 'bold' : 'normal',
+                      cursor: 'pointer',
+                      transition: '0.2s'
+                    }}
+                  >
+                    {page}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="btn btn-secondary"
+                  style={{ padding: '6px 12px', fontSize: '0.8rem', borderRadius: '6px', opacity: currentPage === totalPages ? 0.4 : 1 }}
+                >
+                  Sau ▶
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

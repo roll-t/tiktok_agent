@@ -21,13 +21,24 @@ export default function SidebarNav() {
     },
     {
       href: '/accounts',
-      label: 'Kênh TikTok',
+      label: 'Quản Lý Kênh',
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
           <circle cx="9" cy="7" r="4"></circle>
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
           <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      )
+    },
+    {
+      href: '/download',
+      label: 'Tải & Reup Video',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
       )
     },
@@ -49,7 +60,7 @@ export default function SidebarNav() {
     <aside className="sidebar-nav">
       <div className="sidebar-header">
         <h2 className="gradient-text" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-          TT-AutoPoster
+          AutoPoster
         </h2>
         <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>v1.0.0 Alpha</span>
       </div>
@@ -62,6 +73,14 @@ export default function SidebarNav() {
               key={item.href}
               href={item.href}
               className={`nav-item ${isActive ? 'active' : ''}`}
+              onClick={(e) => {
+                if (typeof window !== 'undefined' && window.isAppBusy) {
+                  const confirmLeave = window.confirm('Hệ thống đang thực hiện tác vụ tải lên hoặc xử lý video. Nếu bạn rời trang, tiến trình này có thể bị hủy bỏ. Bạn vẫn muốn tiếp tục rời đi?');
+                  if (!confirmLeave) {
+                    e.preventDefault();
+                  }
+                }
+              }}
             >
               {item.icon}
               {item.label}

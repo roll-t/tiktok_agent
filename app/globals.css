@@ -39,12 +39,16 @@
   outline: none;
 }
 
+html,
+body {
+  height: 100vh;
+  overflow: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-main);
-  min-height: 100vh;
-  overflow-x: hidden;
   position: relative;
   -webkit-font-smoothing: antialiased;
 }
@@ -317,7 +321,8 @@ select.form-control {
 
 .main-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .sidebar-nav {
@@ -328,12 +333,14 @@ select.form-control {
   display: flex;
   flex-direction: column;
   gap: 32px;
+  height: 100%;
 }
 
 .main-content {
   flex: 1;
   padding: 40px;
   overflow-y: auto;
+  height: 100%;
 }
 
 .sidebar-header {

@@ -53,7 +53,11 @@ async function run() {
   console.log('Đang khởi chạy trình duyệt...');
   const browser = await chromium.launch({
     headless: headless,
-    args: ['--start-maximized']
+    ignoreDefaultArgs: ['--enable-automation'],
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--start-maximized'
+    ]
   });
 
   console.log('Đang khôi phục phiên đăng nhập từ session.json...');
@@ -63,6 +67,13 @@ async function run() {
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     locale: 'vi-VN',
     timezoneId: 'Asia/Ho_Chi_Minh'
+  });
+
+  // Ẩn navigator.webdriver để tránh bị phát hiện tự động hóa
+  await context.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => undefined
+    });
   });
 
   const page = await context.newPage();
