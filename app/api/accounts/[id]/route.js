@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readDb, writeDb, getSessionsDir } from '@/lib/db.js';
+import { syncYoutubeAvatar } from '@/lib/poster.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -47,7 +48,7 @@ export async function DELETE(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const { id } = await params;
-    const { label, username, videoType, avatar } = await request.json();
+    const { label, username, email, password, videoType, avatar, category } = await request.json();
     const db = await readDb();
     
     const accountIndex = db.accounts.findIndex(a => a.id === id);
@@ -63,8 +64,20 @@ export async function PUT(request, { params }) {
       const cleanUsername = username.trim().startsWith('@') ? username.trim().slice(1) : username.trim();
       account.username = cleanUsername;
     }
+    if (email !== undefined) account.email = email.trim();
+    if (password !== undefined) account.password = password.trim();
     if (videoType !== undefined) account.videoType = videoType;
-    if (avatar !== undefined) account.avatar = avatar;
+    if (avatar !== undefined) {
+      const oldAvatar = account.avatar;
+      account.avatar = avatar;
+      if (avatar && avatar !== oldAvatar && avatar.startsWith('data:image')) {
+        console.log(`[API Accounts PUT] Đang kích hoạt đồng bộ ảnh đại diện lên YouTube Studio cho ${id}...`);
+        syncYoutubeAvatar(id, avatar).catch(err => {
+          console.error(`[Avatar Sync Async Error] Lỗi đồng bộ ảnh đại diện cho tài khoản ${id}:`, err);
+        });
+      }
+    }
+    if (category !== undefined) account.category = category.trim() || 'Chưa phân loại';
 
     await writeDb(db);
 

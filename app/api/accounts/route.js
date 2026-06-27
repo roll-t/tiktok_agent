@@ -22,7 +22,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { label, username, videoType, avatar } = await request.json();
+    const { label, username, email, password, videoType, avatar, category } = await request.json();
     if (!label) {
       return NextResponse.json({ error: 'Thiếu tên nhãn kênh.' }, { status: 400 });
     }
@@ -35,18 +35,22 @@ export async function POST(request) {
     global.loginStatuses[accountId] = { status: 'running', error: null };
 
     // Mở trình duyệt YouTube để đăng nhập
-    loginYoutubeAccount(accountId)
+    loginYoutubeAccount(accountId, email, password)
       .then(async (result) => {
         const db = await readDb();
         const newAccount = {
           id: accountId,
           label: label,
-          username: result.username,
+          username: result.username && result.username !== 'youtube_channel' ? result.username : (username || 'youtube_channel'),
+          email: email ? email.trim() : '',
+          password: password ? password.trim() : '',
           platform: 'youtube',
           videoType: cleanVideoType,
           status: result.status,
           sessionFile: `${accountId}.json`,
           avatar: avatar || null,
+          channelUrl: result.channelUrl || null,
+          category: category ? category.trim() : 'Chưa phân loại',
           createdAt: new Date().toISOString()
         };
 

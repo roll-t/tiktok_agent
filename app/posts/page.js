@@ -341,7 +341,7 @@ export default function PostsPage() {
                 <option value="">-- Chọn kênh đăng bài --</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.label} ({acc.username})
+                    [{acc.category || 'Chưa phân loại'}] {acc.label} ({acc.username})
                   </option>
                 ))}
               </select>
@@ -605,7 +605,7 @@ export default function PostsPage() {
                 <option value="all">Tất cả kênh</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.label}
+                    [{acc.category || 'Chưa phân loại'}] {acc.label}
                   </option>
                 ))}
               </select>

@@ -22,12 +22,31 @@ export default function DownloadPage() {
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
   
-  // Danh sách các link đã tải gần đây
-  const [recentUrls, setRecentUrls] = useState([]);
-  const [showAllRecent, setShowAllRecent] = useState(false);
+  // Danh sách các video đã tải gần đây từ database
+  const [recentDownloads, setRecentDownloads] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const HISTORY_PER_PAGE = 10;
+
+  // Trạng thái modal tùy chọn & xem video
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+
+  // Hàm tải danh sách video gần đây
+  const fetchRecentDownloads = async () => {
+    try {
+      const res = await fetch('/api/download');
+      const data = await res.json();
+      if (data.success) {
+        setRecentDownloads(data.downloads || []);
+      }
+    } catch (err) {
+      console.error('Lỗi tải lịch sử video:', err);
+    }
+  };
 
   useEffect(() => {
-    // Tải danh sách kênh TikTok để chọn đăng bài
+    // Tải danh sách kênh để chọn đăng bài
     const fetchAccounts = async () => {
       try {
         const res = await fetch('/api/accounts');
@@ -41,16 +60,7 @@ export default function DownloadPage() {
       }
     };
     fetchAccounts();
-
-    // Tải danh sách link tải gần đây từ localStorage
-    const saved = localStorage.getItem('recent_tiktok_urls');
-    if (saved) {
-      try {
-        setRecentUrls(JSON.parse(saved));
-      } catch (e) {
-        console.error('Lỗi phân tích cú pháp lịch sử URL:', e);
-      }
-    }
+    fetchRecentDownloads();
   }, []);
 
   const isBusy = isDownloading || isScheduling || (downloadedVideo !== null && !scheduleSuccess);
@@ -98,14 +108,7 @@ export default function DownloadPage() {
       if (res.ok && data.success) {
         setDownloadedVideo(data);
         setReupCaption(data.caption);
-
-        // Lưu link vừa tải thành công vào danh sách lịch sử gần đây (tối đa 20 link)
-        setRecentUrls(prev => {
-          const cleanUrl = tiktokUrl.trim();
-          const updated = [cleanUrl, ...prev.filter(u => u !== cleanUrl)].slice(0, 20);
-          localStorage.setItem('recent_tiktok_urls', JSON.stringify(updated));
-          return updated;
-        });
+        fetchRecentDownloads(); // Cập nhật lại lịch sử tải từ database
       } else {
         setError(data.error || 'Tải video thất bại. Vui lòng kiểm tra lại đường dẫn.');
       }
@@ -155,14 +158,27 @@ export default function DownloadPage() {
     }
   };
 
+  const handleClearHistory = async () => {
+    if (confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử tải video?')) {
+      try {
+        const res = await fetch('/api/download', { method: 'DELETE' });
+        if (res.ok) {
+          setRecentDownloads([]);
+        }
+      } catch (err) {
+        console.error('Lỗi xóa lịch sử:', err);
+      }
+    }
+  };
+
   return (
     <div>
       <div style={{ marginBottom: '32px' }}>
         <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '8px' }}>
-          Tải TikTok & <span className="gradient-text">Reup YouTube Shorts</span>
+          Tải Video & <span className="gradient-text">Reup Đa Nền Tảng</span>
         </h1>
         <p style={{ color: 'var(--text-muted)' }}>
-          Tải video TikTok không logo (watermark) tự động và đăng hoặc lên lịch trực tiếp lên các kênh YouTube Shorts.
+          Tải video từ TikTok (không logo), YouTube Shorts, Facebook Reels và đăng hoặc lên lịch trực tiếp lên các kênh YouTube của bạn.
         </p>
       </div>
 
@@ -174,12 +190,12 @@ export default function DownloadPage() {
           
           <form onSubmit={handleDownload}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label className="form-label">Link video TikTok (Hỗ trợ cả link dạng vt.tiktok.com và www.tiktok.com)</label>
+              <label className="form-label">Link video (TikTok, YouTube Shorts, Facebook Reels...)</label>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   type="url"
                   className="form-control"
-                  placeholder="https://www.tiktok.com/@username/video/..."
+                  placeholder="Dán link TikTok, YouTube Shorts hoặc Facebook Reels..."
                   value={tiktokUrl}
                   onChange={(e) => setTiktokUrl(e.target.value)}
                   disabled={isDownloading || isScheduling}
@@ -274,94 +290,159 @@ export default function DownloadPage() {
               {isDownloading ? (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
                   <div style={{ width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
-                  <span>Đang tải video không logo về máy chủ...</span>
+                  <span>Đang tải video về máy chủ...</span>
                 </div>
-              ) : 'Tải Video Không Logo'}
+              ) : 'Tải Video'}
             </button>
           </form>
 
-          {/* Danh sách link tải gần đây */}
-          {recentUrls.length > 0 && (
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Đường dẫn tải gần đây (Click để chọn nhanh):</span>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    setRecentUrls([]);
-                    localStorage.removeItem('recent_tiktok_urls');
-                  }}
-                  style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.7 }}
-                >
-                  Xóa lịch sử
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {(showAllRecent ? recentUrls : recentUrls.slice(0, 3)).map((u, i) => (
-                  <div 
-                    key={i} 
-                    onClick={() => {
-                      if (!isDownloading && !isScheduling) {
-                        setTiktokUrl(u);
-                      }
-                    }}
-                    style={{ 
-                      padding: '8px 12px', 
-                      background: 'rgba(255,255,255,0.02)', 
-                      border: '1px solid rgba(255,255,255,0.04)', 
-                      borderRadius: '6px', 
-                      fontSize: '0.78rem', 
-                      color: 'var(--secondary)', 
-                      cursor: (isDownloading || isScheduling) ? 'not-allowed' : 'pointer',
-                      opacity: (isDownloading || isScheduling) ? 0.5 : 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      transition: '0.2s'
-                    }}
-                    onMouseEnter={(e) => { 
-                      if (!isDownloading && !isScheduling) {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; 
-                      }
-                    }}
-                    onMouseLeave={(e) => { 
-                      if (!isDownloading && !isScheduling) {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; 
-                      }
-                    }}
-                    title={u}
-                  >
-                    {u}
-                  </div>
-                ))}
-              </div>
-              {recentUrls.length > 3 && (
-                <div style={{ textAlign: 'center', marginTop: '10px' }}>
+          {/* Danh sách video đã tải gần đây */}
+          {recentDownloads.length > 0 && (() => {
+            const totalPages = Math.ceil(recentDownloads.length / HISTORY_PER_PAGE);
+            const visibleDownloads = recentDownloads.slice(0, historyPage * HISTORY_PER_PAGE);
+            const hasMore = historyPage < totalPages;
+
+            return (
+              <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--secondary)' }}>
+                    Video Đã Tải Gần Đây ({visibleDownloads.length}/{recentDownloads.length}):
+                  </span>
                   <button
                     type="button"
-                    onClick={() => setShowAllRecent(!showAllRecent)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--secondary)',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      opacity: 0.85,
-                      transition: '0.2s'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.85; }}
+                    onClick={handleClearHistory}
+                    style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.7 }}
                   >
-                    {showAllRecent ? 'Thu gọn' : `Xem thêm (${recentUrls.length - 3} liên kết khác)`}
+                    Xóa lịch sử
                   </button>
                 </div>
-              )}
-            </div>
-          )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+                  {visibleDownloads.map((dl, i) => {
+                    const isYt = dl.url.includes('youtube.com') || dl.url.includes('youtu.be');
+                    const isFb = dl.url.includes('facebook.com') || dl.url.includes('fb.watch') || dl.url.includes('fb.gg');
+                    const platformLabel = isYt ? 'Shorts' : (isFb ? 'Reels' : 'TikTok');
+                    const platformColor = isYt ? '#ff0000' : (isFb ? '#1877f2' : 'var(--primary)');
+
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => {
+                          setSelectedHistoryItem(dl);
+                          setShowOptionsModal(true);
+                          setShowVideoPlayer(false);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px solid rgba(255,255,255,0.05)',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          flexDirection: 'column'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-3px)';
+                          e.currentTarget.style.boxShadow = '0 8px 16px rgba(0,0,0,0.3)';
+                          e.currentTarget.style.borderColor = 'var(--secondary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)';
+                        }}
+                      >
+                        {/* Thumbnail container */}
+                        <div style={{ position: 'relative', width: '100%', paddingBottom: '133.33%', background: 'rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+                          <img
+                            src={dl.cover || '/no-cover.png'}
+                            alt={dl.caption}
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          {/* Play icon overlay on hover */}
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'rgba(0,0,0,0.4)',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            transition: 'opacity 0.2s',
+                            opacity: 0
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                          onMouseLeave={e => e.currentTarget.style.opacity = 0}
+                          >
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polygon points="5 3 19 12 5 21 5 3" fill="#fff" stroke="#fff"/>
+                            </svg>
+                          </div>
+                        </div>
+
+                        {/* Caption text */}
+                        <div style={{ padding: '8px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                            color: '#eee',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            lineHeight: '1.2'
+                          }}>
+                            {dl.caption || 'Video không tiêu đề'}
+                          </span>
+
+                          {/* Platform tag */}
+                          <span style={{
+                            fontSize: '0.62rem',
+                            color: platformColor,
+                            fontWeight: 800,
+                            marginTop: '4px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
+                            {platformLabel}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Nút Xem thêm */}
+                {hasMore && (
+                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryPage(p => p + 1)}
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        color: 'var(--secondary)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        padding: '8px 20px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(37,244,238,0.08)'; e.currentTarget.style.borderColor = 'var(--secondary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                    >
+                      Xem thêm ({recentDownloads.length - visibleDownloads.length} video còn lại)
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Hiển thị Video sau khi tải xong */}
           {downloadedVideo && (
@@ -468,6 +549,151 @@ export default function DownloadPage() {
         )}
 
       </div>
+
+      {/* Modal Tùy chọn cho Video Lịch sử */}
+      {selectedHistoryItem && showOptionsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass-card" style={{
+            width: '90%',
+            maxWidth: '460px',
+            padding: '24px',
+            borderRadius: '16px',
+            border: '1px solid rgba(255,255,255,0.08)',
+            position: 'relative',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            background: 'rgba(23, 23, 28, 0.95)'
+          }}>
+            {/* Nút đóng */}
+            <button
+              onClick={() => {
+                setShowOptionsModal(false);
+                setSelectedHistoryItem(null);
+                setShowVideoPlayer(false);
+              }}
+              style={{
+                position: 'absolute',
+                top: '14px',
+                right: '14px',
+                background: 'rgba(255,255,255,0.08)',
+                border: 'none',
+                color: '#fff',
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: '0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            >
+              ✕
+            </button>
+
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '16px', color: 'var(--secondary)' }}>Tùy Chọn Video</h3>
+
+            {showVideoPlayer ? (
+              <div style={{ marginBottom: '20px' }}>
+                <video
+                  src={`/api/videos/${selectedHistoryItem.videoFilename}`}
+                  controls
+                  autoPlay
+                  style={{ width: '100%', maxHeight: '360px', borderRadius: '12px', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ width: '90px', height: '120px', flexShrink: 0, borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <img
+                    src={selectedHistoryItem.cover || '/no-cover.png'}
+                    alt="Preview"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <p style={{ 
+                    fontSize: '0.88rem', 
+                    fontWeight: 600, 
+                    color: '#eee', 
+                    display: '-webkit-box', 
+                    WebkitLineClamp: 3, 
+                    WebkitBoxOrient: 'vertical', 
+                    overflow: 'hidden', 
+                    margin: 0,
+                    lineHeight: '1.3'
+                  }}>
+                    {selectedHistoryItem.caption || 'Video không tiêu đề'}
+                  </p>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    Tên file: <code>{selectedHistoryItem.videoFilename}</code>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              {!showVideoPlayer && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowVideoPlayer(true)}
+                  style={{ padding: '10px 20px', fontSize: '0.85rem' }}
+                >
+                  Xem Video
+                </button>
+              )}
+              {showVideoPlayer && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowVideoPlayer(false)}
+                  style={{ padding: '10px 20px', fontSize: '0.85rem' }}
+                >
+                  Quay Lại
+                </button>
+              )}
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  // Chọn lại video này để reup
+                  setDownloadedVideo({
+                    videoFilename: selectedHistoryItem.videoFilename,
+                    caption: selectedHistoryItem.caption,
+                    cover: selectedHistoryItem.cover
+                  });
+                  setReupCaption(selectedHistoryItem.caption || '');
+                  
+                  // Đóng modal
+                  setShowOptionsModal(false);
+                  setSelectedHistoryItem(null);
+                  setShowVideoPlayer(false);
+                  
+                  // Cuộn xuống Form đăng bài
+                  setTimeout(() => {
+                    window.scrollTo({ top: 300, behavior: 'smooth' });
+                  }, 100);
+                }}
+                style={{ padding: '10px 20px', fontSize: '0.85rem', background: 'linear-gradient(135deg, var(--secondary), var(--primary))', border: 'none', color: '#fff' }}
+              >
+                Đăng Lại Video Này
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <style jsx>{`
         @keyframes spin {

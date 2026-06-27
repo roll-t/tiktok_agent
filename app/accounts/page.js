@@ -9,7 +9,11 @@ export default function AccountsPage() {
   // Trạng thái cho Form thêm tài khoản
   const [label, setLabel] = useState('');
   const [usernameVal, setUsernameVal] = useState('');
+  const [categoryOption, setCategoryOption] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [videoType, setVideoType] = useState('shorts'); // 'shorts' hoặc 'video'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -20,8 +24,19 @@ export default function AccountsPage() {
   const [editingAccountId, setEditingAccountId] = useState(null);
   const [editLabel, setEditLabel] = useState('');
   const [editUsername, setEditUsername] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editCategoryOption, setEditCategoryOption] = useState('');
+  const [editNewCategoryName, setEditNewCategoryName] = useState('');
   const [editVideoType, setEditVideoType] = useState('shorts');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Trạng thái bộ lọc
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+
+  // Trạng thái danh mục hoạt động riêng
+  const [categoriesList, setCategoriesList] = useState([]);
+  const [newCatInput, setNewCatInput] = useState('');
 
   const fetchAccounts = async () => {
     try {
@@ -31,6 +46,66 @@ export default function AccountsPage() {
       setLoading(false);
     } catch (error) {
       console.error('Lỗi tải danh sách kênh:', error);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      const data = await res.json();
+      if (data.success) {
+        setCategoriesList(data.categories || []);
+      }
+    } catch (err) {
+      console.error('Không thể tải danh sách danh mục:', err);
+    }
+  };
+
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    if (!newCatInput.trim()) return;
+
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name: newCatInput.trim() })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNewCatInput('');
+        fetchCategories();
+      } else {
+        alert(data.error || 'Lỗi khi tạo danh mục.');
+      }
+    } catch (err) {
+      alert('Đã xảy ra lỗi khi tạo danh mục.');
+    }
+  };
+
+  const handleDeleteCategory = async (name) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa danh mục "${name}"? Các tài khoản thuộc danh mục này sẽ chuyển về "Chưa phân loại".`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/categories?name=${encodeURIComponent(name)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchCategories();
+        fetchAccounts();
+        if (selectedCategoryFilter === name) {
+          setSelectedCategoryFilter('all');
+        }
+      } else {
+        alert(data.error || 'Lỗi khi xóa danh mục.');
+      }
+    } catch (err) {
+      alert('Đã xảy ra lỗi khi xóa danh mục.');
     }
   };
 
@@ -61,14 +136,17 @@ export default function AccountsPage() {
 
   useEffect(() => {
     fetchAccounts();
+    fetchCategories();
   }, []);
 
   const handleAddAccount = async (e) => {
     e.preventDefault();
-    if (!label.trim()) return;
+    if (!usernameVal.trim()) return;
 
     setIsLoggingIn(true);
     setLoginError('');
+
+    const finalCategory = categoryOption === '__NEW__' ? (newCategoryName.trim() || 'Chưa phân loại') : (categoryOption || 'Chưa phân loại');
 
     try {
       const res = await fetch('/api/accounts', {
@@ -76,15 +154,18 @@ export default function AccountsPage() {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          label: label.trim(), 
+        body: JSON.stringify({
+          label: usernameVal.trim(),
           type: 'local',
           cookie: '',
           username: usernameVal.trim(),
+          email: email.trim(),
+          password: password.trim(),
           profileId: '',
           platform: 'youtube',
           videoType: videoType,
-          avatar: avatar
+          avatar: avatar,
+          category: finalCategory
         })
       });
 
@@ -109,6 +190,10 @@ export default function AccountsPage() {
               clearInterval(pollInterval);
               setLabel('');
               setUsernameVal('');
+              setEmail('');
+              setPassword('');
+              setCategoryOption('');
+              setNewCategoryName('');
               setAvatar(null);
               setIsLoggingIn(false);
               fetchAccounts(); // Tải lại danh sách kênh
@@ -137,15 +222,21 @@ export default function AccountsPage() {
     setEditingAccountId(acc.id);
     setEditLabel(acc.label);
     setEditUsername(acc.username);
+    setEditEmail(acc.email || '');
+    setEditPassword(acc.password || '');
+    setEditCategoryOption(acc.category || 'Chưa phân loại');
+    setEditNewCategoryName('');
     setEditVideoType(acc.videoType || 'shorts');
     setEditAvatar(acc.avatar || null);
   };
 
   const handleEditSubmit = async (e, id) => {
     e.preventDefault();
-    if (!editLabel.trim() || !editUsername.trim()) return;
+    if (!editUsername.trim()) return;
 
     setIsSavingEdit(true);
+    const finalEditCategory = editCategoryOption === '__NEW__' ? (editNewCategoryName.trim() || 'Chưa phân loại') : (editCategoryOption || 'Chưa phân loại');
+
     try {
       const res = await fetch(`/api/accounts/${id}`, {
         method: 'PUT',
@@ -153,8 +244,11 @@ export default function AccountsPage() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          label: editLabel.trim(),
+          label: editUsername.trim(),
           username: editUsername.trim(),
+          email: editEmail.trim(),
+          password: editPassword.trim(),
+          category: finalEditCategory,
           videoType: editVideoType,
           avatar: editAvatar
         })
@@ -197,6 +291,13 @@ export default function AccountsPage() {
 
   const videoTypeLabel = (vt) => vt === 'shorts' ? 'YouTube Shorts' : 'YouTube Thường';
 
+  const existingCategories = categoriesList.map(c => c.name);
+
+  const filteredAccounts = accounts.filter(acc => {
+    if (selectedCategoryFilter === 'all') return true;
+    return (acc.category || 'Chưa phân loại') === selectedCategoryFilter;
+  });
+
   return (
     <div>
       <div style={{ marginBottom: '32px' }}>
@@ -210,160 +311,273 @@ export default function AccountsPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '30px', alignItems: 'start' }}>
 
-        {/* Form liên kết tài khoản mới */}
-        <div className="glass-card">
-          <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', fontWeight: 700 }}>Thêm Kênh YouTube Mới</h3>
+        {/* Cột bên trái: Form thêm kênh & Quản lý danh mục */}
+        <div>
+          {/* Form liên kết tài khoản mới */}
+          <div className="glass-card">
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', fontWeight: 700 }}>Thêm Kênh YouTube Mới</h3>
 
-          <form onSubmit={handleAddAccount}>
-            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
-              <div style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.02)', border: '1.5px dashed rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                {avatar ? (
-                  <img src={avatar} alt="Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3 }}>
-                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                    <circle cx="12" cy="13" r="4"></circle>
-                  </svg>
-                )}
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label" style={{ marginBottom: '6px' }}>Ảnh đại diện kênh (Tùy chọn)</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    type="button"
-                    onClick={() => document.getElementById('avatar-input').click()}
-                    className="btn btn-secondary"
-                    style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-                  >
-                    Chọn ảnh
-                  </button>
-                  {avatar && (
+            <form onSubmit={handleAddAccount}>
+              <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ position: 'relative', width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: '1.5px dashed rgba(255,255,255,0.15)', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                  {avatar ? (
+                    <img src={avatar} alt="Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: '#fff' }}>
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="form-label" style={{ marginBottom: '6px' }}>Ảnh đại diện kênh (Tùy chọn)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                       type="button"
-                      onClick={() => setAvatar(null)}
-                      className="btn btn-danger"
-                      style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '6px', background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.2)', color: 'var(--danger)' }}
+                      onClick={() => document.getElementById('avatar-input').click()}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                    >
+                      Chọn ảnh
+                    </button>
+                    {avatar && (
+                      <button
+                        type="button"
+                        onClick={() => setAvatar(null)}
+                        className="btn btn-danger"
+                        style={{ padding: '6px 12px', fontSize: '0.75rem', borderRadius: '6px', background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.2)', color: 'var(--danger)' }}
+                      >
+                        Xóa
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="avatar-input"
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => handleAvatarChange(e, false)}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label className="form-label">Tên Kênh YouTube</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ví dụ: Kênh Giải Trí Tổng Hợp..."
+                  value={usernameVal}
+                  onChange={(e) => setUsernameVal(e.target.value)}
+                  disabled={isLoggingIn}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Tài Khoản Kênh (Email)</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    placeholder="example@gmail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoggingIn}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Mật Khẩu Kênh (Password)</label>
+                  <input
+                    type="password"
+                    className="form-control"
+                    placeholder="Mật khẩu Google"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoggingIn}
+                  />
+                </div>
+              </div>
+
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px', lineHeight: '1.3' }}>
+                * Trình duyệt sẽ mở ra trang YouTube Studio để bạn đăng nhập. Bạn có thể nhập tài khoản/mật khẩu ở trên để hệ thống tự điền giúp bạn khi mở cửa sổ.
+              </span>
+
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label className="form-label">Danh mục kênh</label>
+                <select
+                  className="form-control"
+                  value={categoryOption}
+                  onChange={(e) => setCategoryOption(e.target.value)}
+                  disabled={isLoggingIn}
+                  style={{ background: 'var(--card-bg)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  <option value="">-- Chưa phân loại --</option>
+                  {existingCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                  <option value="__NEW__">+ Tạo danh mục mới...</option>
+                </select>
+
+                {categoryOption === '__NEW__' && (
+                  <input
+                    type="text"
+                    className="form-control"
+                    style={{ marginTop: '10px' }}
+                    placeholder="Nhập tên danh mục mới..."
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    disabled={isLoggingIn}
+                    required
+                  />
+                )}
+              </div>
+
+              {/* Loại video mặc định */}
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label className="form-label">Loại video mặc định của kênh</label>
+                <div style={{ display: 'flex', gap: '10px', marginTop: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setVideoType('shorts')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: videoType === 'shorts' ? 'var(--primary)' : 'transparent',
+                      color: '#fff',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      transition: '0.2s'
+                    }}
+                    disabled={isLoggingIn}
+                  >
+                    YouTube Shorts
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVideoType('video')}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      background: videoType === 'video' ? 'var(--primary)' : 'transparent',
+                      color: '#fff',
+                      fontWeight: 600,
+                      fontSize: '0.85rem',
+                      cursor: 'pointer',
+                      transition: '0.2s'
+                    }}
+                    disabled={isLoggingIn}
+                  >
+                    YouTube Thường
+                  </button>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px', lineHeight: '1.3' }}>
+                  * Có thể thay đổi từng bài đăng riêng lẻ khi tạo bài mới.
+                </span>
+              </div>
+
+              {loginError && (
+                <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginBottom: '16px', padding: '10px', background: 'var(--danger-bg)', borderRadius: '8px', border: '1px solid rgba(255, 71, 87, 0.2)' }}>
+                  {loginError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '14px', marginTop: '8px' }}
+                disabled={isLoggingIn}
+              >
+                {isLoggingIn ? 'Đang chạy trình duyệt...' : 'Bắt Đầu Đăng Nhập'}
+              </button>
+            </form>
+
+            {isLoggingIn && (
+              <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(37, 244, 238, 0.08)', borderRadius: '10px', border: '1px solid rgba(37, 244, 238, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '20px', height: '20px', border: '2.5px solid rgba(37, 244, 238, 0.2)', borderTopColor: 'var(--secondary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                  <strong style={{ fontSize: '0.9rem', color: 'var(--secondary)' }}>
+                    Trình duyệt đang khởi chạy...
+                  </strong>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  Vui lòng chuyển qua cửa sổ Edge/Chrome vừa xuất hiện, thực hiện đăng nhập vào tài khoản Google/YouTube của bạn. Hệ thống sẽ tự lưu phiên làm việc và đóng cửa sổ khi thành công.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Quản lý Danh mục */}
+          <div className="glass-card" style={{ marginTop: '20px' }}>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', fontWeight: 700 }}>Quản Lý Danh Mục</h3>
+
+            <form onSubmit={handleCreateCategory} style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+              <input
+                type="text"
+                className="form-control"
+                placeholder="Nhập tên danh mục mới..."
+                value={newCatInput}
+                onChange={(e) => setNewCatInput(e.target.value)}
+                style={{ flex: 1, padding: '10px 12px', fontSize: '0.85rem' }}
+                required
+              />
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ padding: '10px 16px', fontSize: '0.85rem', whiteSpace: 'nowrap' }}
+              >
+                Thêm
+              </button>
+            </form>
+
+            {existingCategories.length === 0 ? (
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+                Chưa có danh mục tự tạo nào.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                {existingCategories.map(cat => (
+                  <div
+                    key={cat}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    <span style={{ color: '#fff', fontWeight: 500 }}>{cat}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCategory(cat)}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--danger)',
+                        cursor: 'pointer',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        transition: 'background 0.2s'
+                      }}
                     >
                       Xóa
                     </button>
-                  )}
-                </div>
-                <input
-                  id="avatar-input"
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={(e) => handleAvatarChange(e, false)}
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Tên Nhãn Kênh (Ví dụ: Kênh Reup Đồ Gia Dụng)</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Nhập tên gợi nhớ..."
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                disabled={isLoggingIn}
-                required
-              />
-            </div>
-
-            <div className="form-group" style={{ marginTop: '16px' }}>
-              <label className="form-label">Tên Kênh YouTube</label>
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Ví dụ: Kênh Giải Trí Tổng Hợp..."
-                value={usernameVal}
-                onChange={(e) => setUsernameVal(e.target.value)}
-                disabled={isLoggingIn}
-                required
-              />
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px', lineHeight: '1.3' }}>
-                * Trình duyệt sẽ mở ra trang YouTube Studio để bạn đăng nhập tài khoản Google của mình bằng tay. Sau khi đăng nhập thành công, hệ thống sẽ tự động đồng bộ và lưu phiên.
-              </span>
-            </div>
-
-            {/* Loại video mặc định */}
-            <div className="form-group" style={{ marginTop: '16px' }}>
-              <label className="form-label">Loại video mặc định của kênh</label>
-              <div style={{ display: 'flex', gap: '10px', marginTop: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <button
-                  type="button"
-                  onClick={() => setVideoType('shorts')}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: videoType === 'shorts' ? 'var(--primary)' : 'transparent',
-                    color: '#fff',
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    transition: '0.2s'
-                  }}
-                  disabled={isLoggingIn}
-                >
-                  YouTube Shorts
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVideoType('video')}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    background: videoType === 'video' ? 'var(--primary)' : 'transparent',
-                    color: '#fff',
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                    cursor: 'pointer',
-                    transition: '0.2s'
-                  }}
-                  disabled={isLoggingIn}
-                >
-                  YouTube Thường
-                </button>
-              </div>
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px', lineHeight: '1.3' }}>
-                * Có thể thay đổi từng bài đăng riêng lẻ khi tạo bài mới.
-              </span>
-            </div>
-
-            {loginError && (
-              <div style={{ color: 'var(--danger)', fontSize: '0.85rem', marginBottom: '16px', padding: '10px', background: 'var(--danger-bg)', borderRadius: '8px', border: '1px solid rgba(255, 71, 87, 0.2)' }}>
-                {loginError}
+                  </div>
+                ))}
               </div>
             )}
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%', padding: '14px', marginTop: '8px' }}
-              disabled={isLoggingIn}
-            >
-              {isLoggingIn ? 'Đang chạy trình duyệt...' : 'Bắt Đầu Đăng Nhập'}
-            </button>
-          </form>
-
-          {isLoggingIn && (
-            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(37, 244, 238, 0.08)', borderRadius: '10px', border: '1px solid rgba(37, 244, 238, 0.15)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '20px', height: '20px', border: '2.5px solid rgba(37, 244, 238, 0.2)', borderTopColor: 'var(--secondary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--secondary)' }}>
-                  Trình duyệt đang khởi chạy...
-                </strong>
-              </div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                Vui lòng chuyển qua cửa sổ Edge/Chrome vừa xuất hiện, thực hiện đăng nhập vào tài khoản Google/YouTube của bạn. Hệ thống sẽ tự lưu phiên làm việc và đóng cửa sổ khi thành công.
-              </p>
-            </div>
-          )}
+          </div>
         </div>
 
         {/* Danh sách các tài khoản */}
@@ -383,207 +597,333 @@ export default function AccountsPage() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {accounts.map((acc) => (
-                <div key={acc.id} style={{ padding: '16px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', transition: '0.2s' }}>
-                  {editingAccountId === acc.id ? (
-                    <form onSubmit={(e) => handleEditSubmit(e, acc.id)}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--secondary)', marginBottom: '4px' }}>Chỉnh Sửa Thông Tin Kênh</h4>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                          <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                            {editAvatar ? (
-                              <img src={editAvatar} alt="Edit Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Không có</span>
-                            )}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Thay đổi ảnh đại diện (Tùy chọn)</label>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                type="button"
-                                onClick={() => document.getElementById(`avatar-edit-input-${acc.id}`).click()}
-                                className="btn btn-secondary"
-                                style={{ padding: '4px 10px', fontSize: '0.72rem', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
-                              >
-                                Chọn ảnh
-                              </button>
-                              {editAvatar && (
-                                <button
-                                  type="button"
-                                  onClick={() => setEditAvatar(null)}
-                                  className="btn btn-danger"
-                                  style={{ padding: '4px 10px', fontSize: '0.72rem', borderRadius: '4px', background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.2)', color: 'var(--danger)' }}
-                                >
-                                  Xóa
-                                </button>
+
+              {/* Nút lọc danh mục */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryFilter('all')}
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '6px 12px',
+                    borderRadius: '20px',
+                    border: 'none',
+                    background: selectedCategoryFilter === 'all' ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: '0.2s'
+                  }}
+                >
+                  Tất cả ({accounts.length})
+                </button>
+                {Array.from(new Set(accounts.map(a => a.category || 'Chưa phân loại'))).map(cat => {
+                  const count = accounts.filter(a => (a.category || 'Chưa phân loại') === cat).length;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategoryFilter(cat)}
+                      style={{
+                        fontSize: '0.78rem',
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: 'none',
+                        background: selectedCategoryFilter === cat ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        transition: '0.2s'
+                      }}
+                    >
+                      {cat} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {filteredAccounts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                  Không tìm thấy tài khoản nào thuộc danh mục này.
+                </div>
+              ) : (
+                filteredAccounts.map((acc) => (
+                  <div key={acc.id} style={{ padding: '16px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '12px', transition: '0.2s' }}>
+                    {editingAccountId === acc.id ? (
+                      <form onSubmit={(e) => handleEditSubmit(e, acc.id)}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--secondary)', marginBottom: '4px' }}>Chỉnh Sửa Thông Tin Kênh</h4>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                            <div style={{ position: 'relative', width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', border: '1.5px dashed rgba(255,255,255,0.15)', display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                              {editAvatar ? (
+                                <img src={editAvatar} alt="Edit Avatar Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.4, color: '#fff' }}>
+                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                  <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
                               )}
                             </div>
-                            <input
-                              id={`avatar-edit-input-${acc.id}`}
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              onChange={(e) => handleAvatarChange(e, true)}
-                            />
+                            <div style={{ flex: 1 }}>
+                              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Thay đổi ảnh đại diện (Tùy chọn)</label>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => document.getElementById(`avatar-edit-input-${acc.id}`).click()}
+                                  className="btn btn-secondary"
+                                  style={{ padding: '4px 10px', fontSize: '0.72rem', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                                >
+                                  Chọn ảnh
+                                </button>
+                                {editAvatar && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditAvatar(null)}
+                                    className="btn btn-danger"
+                                    style={{ padding: '4px 10px', fontSize: '0.72rem', borderRadius: '4px', background: 'rgba(255,71,87,0.1)', border: '1px solid rgba(255,71,87,0.2)', color: 'var(--danger)' }}
+                                  >
+                                    Xóa
+                                  </button>
+                                )}
+                              </div>
+                              <input
+                                id={`avatar-edit-input-${acc.id}`}
+                                type="file"
+                                accept="image/*"
+                                style={{ display: 'none' }}
+                                onChange={(e) => handleAvatarChange(e, true)}
+                              />
+                            </div>
                           </div>
-                        </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                          <div className="form-group" style={{ margin: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Tên Nhãn Kênh</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                              value={editLabel}
-                              onChange={(e) => setEditLabel(e.target.value)}
-                              required
-                              disabled={isSavingEdit}
-                            />
-                          </div>
-                          
-                          <div className="form-group" style={{ margin: 0 }}>
-                            <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Tên Kênh YouTube</label>
-                            <input
-                              type="text"
-                              className="form-control"
-                              style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                              value={editUsername}
-                              onChange={(e) => setEditUsername(e.target.value)}
-                              required
-                              disabled={isSavingEdit}
-                            />
-                          </div>
-                        </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Tên Kênh YouTube</label>
+                              <input
+                                type="text"
+                                className="form-control"
+                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                                value={editUsername}
+                                onChange={(e) => setEditUsername(e.target.value)}
+                                required
+                                disabled={isSavingEdit}
+                              />
+                            </div>
 
-                        <div className="form-group" style={{ margin: 0 }}>
-                          <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '6px' }}>Loại video mặc định</label>
-                          <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Danh mục kênh</label>
+                              <select
+                                className="form-control"
+                                style={{ padding: '8px 12px', fontSize: '0.85rem', background: 'var(--card-bg)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}
+                                value={editCategoryOption}
+                                onChange={(e) => setEditCategoryOption(e.target.value)}
+                                disabled={isSavingEdit}
+                              >
+                                <option value="">-- Chưa phân loại --</option>
+                                {existingCategories.map(cat => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                                <option value="__NEW__">+ Tạo danh mục mới...</option>
+                              </select>
+
+                              {editCategoryOption === '__NEW__' && (
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  style={{ padding: '8px 12px', fontSize: '0.85rem', marginTop: '8px' }}
+                                  placeholder="Tên danh mục..."
+                                  value={editNewCategoryName}
+                                  onChange={(e) => setEditNewCategoryName(e.target.value)}
+                                  disabled={isSavingEdit}
+                                  required
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Tài Khoản Kênh (Email)</label>
+                              <input
+                                type="email"
+                                className="form-control"
+                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                                value={editEmail}
+                                onChange={(e) => setEditEmail(e.target.value)}
+                                disabled={isSavingEdit}
+                              />
+                            </div>
+                            <div className="form-group" style={{ margin: 0 }}>
+                              <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Mật Khẩu Kênh (Password)</label>
+                              <input
+                                type="password"
+                                className="form-control"
+                                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                                value={editPassword}
+                                onChange={(e) => setEditPassword(e.target.value)}
+                                disabled={isSavingEdit}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-group" style={{ marginTop: '12px', marginBottom: 0 }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '6px' }}>Loại video mặc định</label>
+                            <div style={{ display: 'flex', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '3px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                              <button
+                                type="button"
+                                onClick={() => setEditVideoType('shorts')}
+                                style={{
+                                  flex: 1, padding: '6px 10px', borderRadius: '4px', border: 'none',
+                                  background: editVideoType === 'shorts' ? 'var(--primary)' : 'transparent',
+                                  color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s'
+                                }}
+                                disabled={isSavingEdit}
+                              >
+                                YouTube Shorts
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditVideoType('video')}
+                                style={{
+                                  flex: 1, padding: '6px 10px', borderRadius: '4px', border: 'none',
+                                  background: editVideoType === 'video' ? 'var(--primary)' : 'transparent',
+                                  color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s'
+                                }}
+                                disabled={isSavingEdit}
+                              >
+                                YouTube Thường
+                              </button>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
                             <button
                               type="button"
-                              onClick={() => setEditVideoType('shorts')}
-                              style={{
-                                flex: 1, padding: '6px 10px', borderRadius: '4px', border: 'none',
-                                background: editVideoType === 'shorts' ? 'var(--primary)' : 'transparent',
-                                color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s'
-                              }}
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 16px', fontSize: '0.8rem' }}
+                              onClick={() => setEditingAccountId(null)}
                               disabled={isSavingEdit}
                             >
-                              YouTube Shorts
+                              Hủy
                             </button>
                             <button
-                              type="button"
-                              onClick={() => setEditVideoType('video')}
-                              style={{
-                                flex: 1, padding: '6px 10px', borderRadius: '4px', border: 'none',
-                                background: editVideoType === 'video' ? 'var(--primary)' : 'transparent',
-                                color: '#fff', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer', transition: '0.2s'
-                              }}
+                              type="submit"
+                              className="btn btn-primary"
+                              style={{ padding: '6px 16px', fontSize: '0.8rem' }}
                               disabled={isSavingEdit}
                             >
-                              YouTube Thường
+                              {isSavingEdit ? 'Đang lưu...' : 'Lưu Thay Đổi'}
                             </button>
                           </div>
                         </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-                            onClick={() => setEditingAccountId(null)}
-                            disabled={isSavingEdit}
-                          >
-                            Hủy
-                          </button>
-                          <button
-                            type="submit"
-                            className="btn btn-primary"
-                            style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-                            disabled={isSavingEdit}
-                          >
-                            {isSavingEdit ? 'Đang lưu...' : 'Lưu Thay Đổi'}
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  ) : (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        {acc.avatar ? (
-                          <img 
-                            src={acc.avatar} 
-                            alt={acc.label} 
-                            style={{ 
-                              width: '48px', 
-                              height: '48px', 
-                              borderRadius: '50%', 
-                              objectFit: 'cover',
-                              border: '2px solid rgba(255,255,255,0.08)'
-                            }} 
-                          />
-                        ) : (
-                          <div style={{ 
-                            width: '48px', 
-                            height: '48px', 
-                            borderRadius: '50%', 
-                            background: 'linear-gradient(135deg, #ff4757, #ff6b81)', 
-                            display: 'flex', 
-                            justifyContent: 'center', 
-                            alignItems: 'center', 
-                            fontSize: '1.25rem', 
-                            fontWeight: 800, 
-                            color: '#fff' 
-                          }}>
-                            {acc.label.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-
-                        <div>
-                          <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff' }}>{acc.label}</h4>
-                          <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                            <span>tên: <strong>{acc.username}</strong></span>
-                            <span>•</span>
-                            <span>Đã thêm: {new Date(acc.createdAt).toLocaleDateString('vi-VN')}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span
+                      </form>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <a
+                          href={acc.channelUrl || `https://www.youtube.com/results?search_query=${encodeURIComponent(acc.username || acc.label)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="channel-item-link"
                           style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '4px 10px',
-                            borderRadius: '99px',
-                            background: (acc.videoType || 'shorts') === 'shorts' ? 'rgba(255, 0, 0, 0.15)' : 'rgba(37, 244, 238, 0.1)',
-                            color: (acc.videoType || 'shorts') === 'shorts' ? '#ff4444' : 'var(--secondary)',
-                            border: (acc.videoType || 'shorts') === 'shorts' ? '1px solid rgba(255,0,0,0.2)' : '1px solid rgba(37,244,238,0.15)'
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '16px',
+                            textDecoration: 'none',
+                            color: 'inherit'
                           }}
                         >
-                          {videoTypeLabel(acc.videoType || 'shorts')}
-                        </span>
-                        <button
-                          onClick={() => handleStartEdit(acc)}
-                          className="btn btn-secondary"
-                          style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                        >
-                          Sửa
-                        </button>
-                        <button
-                          onClick={() => handleDeleteAccount(acc.id)}
-                          className="btn btn-danger"
-                          style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-                        >
-                          Xóa
-                        </button>
+                          {acc.avatar ? (
+                            <img
+                              src={acc.avatar}
+                              alt={acc.label}
+                              style={{
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: '2px solid rgba(255,255,255,0.08)'
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              background: 'linear-gradient(135deg, #ff4757, #ff6b81)',
+                              display: 'flex',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              fontSize: '1.25rem',
+                              fontWeight: 800,
+                              color: '#fff'
+                            }}>
+                              {(acc.username || acc.label || 'Y').charAt(0).toUpperCase()}
+                            </div>
+                          )}
+
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#fff', transition: 'color 0.2s', margin: 0 }}>{acc.username || acc.label}</h4>
+                              <span style={{
+                                fontSize: '0.65rem',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                background: 'rgba(255,255,255,0.06)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'var(--text-muted)',
+                                fontWeight: 500,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {acc.category || 'Chưa phân loại'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              {acc.email && (
+                                <>
+                                  <span>email: <strong>{acc.email}</strong></span>
+                                  <span>•</span>
+                                </>
+                              )}
+                              <span>Đã thêm: {new Date(acc.createdAt).toLocaleDateString('vi-VN')}</span>
+                            </div>
+                          </div>
+                        </a>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '4px 10px',
+                              borderRadius: '99px',
+                              background: (acc.videoType || 'shorts') === 'shorts' ? 'rgba(255, 0, 0, 0.15)' : 'rgba(37, 244, 238, 0.1)',
+                              color: (acc.videoType || 'shorts') === 'shorts' ? '#ff4444' : 'var(--secondary)',
+                              border: (acc.videoType || 'shorts') === 'shorts' ? '1px solid rgba(255,0,0,0.2)' : '1px solid rgba(37,244,238,0.15)'
+                            }}
+                          >
+                            {videoTypeLabel(acc.videoType || 'shorts')}
+                          </span>
+                          <button
+                            onClick={() => handleStartEdit(acc)}
+                            className="btn btn-secondary"
+                            style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAccount(acc.id)}
+                            className="btn btn-danger"
+                            style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -593,6 +933,16 @@ export default function AccountsPage() {
       <style jsx>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        .channel-item-link {
+          transition: opacity 0.2s;
+        }
+        .channel-item-link:hover {
+          opacity: 0.85;
+        }
+        .channel-item-link:hover h4 {
+          text-decoration: underline;
+          color: var(--secondary) !important;
         }
       `}</style>
     </div>
