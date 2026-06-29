@@ -100,3 +100,48 @@ export async function DELETE(request) {
     return NextResponse.json({ error: error.message || 'Lỗi không xác định.' }, { status: 500 });
   }
 }
+
+export async function PUT(request) {
+  try {
+    const { oldName, newName } = await request.json();
+    if (!oldName || !oldName.trim() || !newName || !newName.trim()) {
+      return NextResponse.json({ error: 'Tên danh mục cũ và mới không được trống.' }, { status: 400 });
+    }
+
+    const cleanOld = oldName.trim();
+    const cleanNew = newName.trim();
+
+    if (cleanNew === 'Chưa phân loại') {
+      return NextResponse.json({ error: 'Tên danh mục mới không hợp lệ.' }, { status: 400 });
+    }
+
+    const db = await getMongoClientDb();
+
+    // Kiểm tra xem danh mục mới đã tồn tại chưa
+    if (cleanOld.toLowerCase() !== cleanNew.toLowerCase()) {
+      const existing = await db.collection('categories').findOne({
+        name: { $regex: new RegExp(`^${cleanNew.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') }
+      });
+      if (existing) {
+        return NextResponse.json({ error: 'Danh mục mới này đã tồn tại.' }, { status: 400 });
+      }
+    }
+
+    // Cập nhật tên danh mục
+    await db.collection('categories').updateOne(
+      { name: cleanOld },
+      { $set: { name: cleanNew } }
+    );
+
+    // Cập nhật tất cả tài khoản sử dụng danh mục này
+    await db.collection('accounts').updateMany(
+      { category: cleanOld },
+      { $set: { category: cleanNew } }
+    );
+
+    return NextResponse.json({ success: true, message: 'Đã cập nhật danh mục thành công.' });
+  } catch (error) {
+    console.error('[API Categories PUT Error]:', error);
+    return NextResponse.json({ error: error.message || 'Lỗi không xác định.' }, { status: 500 });
+  }
+}

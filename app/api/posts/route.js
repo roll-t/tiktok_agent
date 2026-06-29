@@ -26,7 +26,7 @@ export async function GET() {
   // Sắp xếp bài đăng mới nhất lên đầu
   const sortedPosts = [...db.posts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-  return NextResponse.json({ posts: sortedPosts });
+  return NextResponse.json({ posts: sortedPosts, syncStatus: global.syncStatus || null });
 }
 
 export async function POST(request) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function DownloadPage() {
@@ -8,20 +8,29 @@ export default function DownloadPage() {
   const [tiktokUrl, setTiktokUrl] = useState('');
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState('');
-  
+
   // Thông tin video đã tải về thành công
   const [downloadedVideo, setDownloadedVideo] = useState(null);
-  
+
   // Danh sách tài khoản TikTok để liên kết đăng bài
   const [accounts, setAccounts] = useState([]);
-  
+
   // Trạng thái cho Form đăng bài Reup
-  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedAccountIds, setSelectedAccountIds] = useState([]);
   const [reupCaption, setReupCaption] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
-  
+
+  const [thumbnailFile, setThumbnailFile] = useState(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState(null);
+  const thumbnailInputRef = useRef(null);
+
+  // Cài đặt thư mục lưu video
+  const [customUploadsDir, setCustomUploadsDir] = useState('');
+  const [settingsMessage, setSettingsMessage] = useState('');
+  const [showFolderModal, setShowFolderModal] = useState(false);
+
   // Danh sách các video đã tải gần đây từ database
   const [recentDownloads, setRecentDownloads] = useState([]);
   const [historyPage, setHistoryPage] = useState(1);
@@ -45,6 +54,14 @@ export default function DownloadPage() {
     }
   };
 
+  const getLimitTimeLeft = (reachedAt) => {
+    if (!reachedAt) return null;
+    const diff = new Date(reachedAt).getTime() + (24 * 60 * 60 * 1000) - Date.now();
+    if (diff <= 0) return null;
+    const hours = Math.ceil(diff / (1000 * 60 * 60));
+    return `${hours}h`;
+  };
+
   useEffect(() => {
     // Tải danh sách kênh để chọn đăng bài
     const fetchAccounts = async () => {
@@ -52,15 +69,26 @@ export default function DownloadPage() {
         const res = await fetch('/api/accounts');
         const data = await res.json();
         setAccounts(data.accounts || []);
-        if (data.accounts && data.accounts.length > 0) {
-          setSelectedAccountId(data.accounts[0].id);
-        }
+        // Không tự động chọn kênh nào khi mới tải trang để người dùng tự chọn thủ công
+        setSelectedAccountIds([]);
       } catch (err) {
         console.error('Lỗi tải danh sách kênh:', err);
       }
     };
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (data.success && data.settings) {
+          setCustomUploadsDir(data.settings.customUploadsDir || '');
+        }
+      } catch (err) {
+        console.error('Lỗi tải cài đặt:', err);
+      }
+    };
     fetchAccounts();
     fetchRecentDownloads();
+    fetchSettings();
   }, []);
 
   const isBusy = isDownloading || isScheduling || (downloadedVideo !== null && !scheduleSuccess);
@@ -84,6 +112,50 @@ export default function DownloadPage() {
       }
     };
   }, [isBusy]);
+
+  const handleOpenFolder = async () => {
+    try {
+      await fetch('/api/settings?action=open', { method: 'POST' });
+    } catch (err) {
+      console.error('Lỗi mở thư mục:', err);
+    }
+  };
+
+  const handleSelectFolder = async () => {
+    setSettingsMessage('Đang mở hộp thoại chọn thư mục...');
+    try {
+      const res = await fetch('/api/settings?action=select-folder', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.success && data.path) {
+        setCustomUploadsDir(data.path);
+        setSettingsMessage('✓ Đã chọn thư mục. Hãy bấm "Lưu cài đặt" để hoàn tất!');
+      } else {
+        setSettingsMessage(data.error || 'Hủy chọn thư mục.');
+      }
+    } catch (err) {
+      setSettingsMessage('Lỗi: Không thể kết nối máy chủ.');
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSettingsMessage('');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customUploadsDir })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSettingsMessage('✓ Đã lưu cài đặt thư mục thành công!');
+        setTimeout(() => setSettingsMessage(''), 3000);
+      } else {
+        setSettingsMessage(`Lỗi: ${data.error || 'Không thể lưu cài đặt.'}`);
+      }
+    } catch (err) {
+      setSettingsMessage('Lỗi: Kết nối máy chủ thất bại.');
+    }
+  };
 
   const handleDownload = async (e) => {
     e.preventDefault();
@@ -119,41 +191,78 @@ export default function DownloadPage() {
     }
   };
 
+  const handleThumbnailChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setThumbnailFile(file);
+      // Tạo preview
+      const reader = new FileReader();
+      reader.onload = (ev) => setThumbnailPreview(ev.target.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeThumbnail = () => {
+    setThumbnailFile(null);
+    setThumbnailPreview(null);
+    if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+  };
+
   const handleCreatePost = async (e) => {
     e.preventDefault();
-    if (!downloadedVideo || !selectedAccountId) return;
+    if (!downloadedVideo || selectedAccountIds.length === 0) {
+      setError('Vui lòng chọn ít nhất một tài khoản để đăng bài.');
+      return;
+    }
 
     setIsScheduling(true);
     setError('');
 
-    const formData = new FormData();
-    formData.append('videoFilename', downloadedVideo.videoFilename);
-    formData.append('accountId', selectedAccountId);
-    formData.append('caption', reupCaption);
-    if (scheduledAt) {
-      formData.append('scheduledAt', new Date(scheduledAt).toISOString());
+    let successCount = 0;
+    let failedList = [];
+
+    for (const accId of selectedAccountIds) {
+      const formData = new FormData();
+      formData.append('videoFilename', downloadedVideo.videoFilename);
+      formData.append('accountId', accId);
+      formData.append('caption', reupCaption);
+      if (scheduledAt) {
+        formData.append('scheduledAt', new Date(scheduledAt).toISOString());
+      }
+      if (thumbnailFile) {
+        formData.append('thumbnail', thumbnailFile);
+      }
+      const selectedAccount = accounts.find(a => a.id === accId);
+      if (selectedAccount && selectedAccount.videoType) {
+        formData.append('videoType', selectedAccount.videoType);
+      }
+
+      try {
+        const res = await fetch('/api/posts', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          successCount++;
+        } else {
+          failedList.push(selectedAccount ? selectedAccount.label : accId);
+        }
+      } catch (err) {
+        failedList.push(selectedAccount ? selectedAccount.label : accId);
+      }
     }
 
-    try {
-      const res = await fetch('/api/posts', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setScheduleSuccess(true);
-        // Chuyển hướng sang trang quản lý bài đăng sau 2 giây
-        setTimeout(() => {
-          router.push('/posts');
-        }, 1500);
-      } else {
-        setError(data.error || 'Lên lịch bài đăng thất bại.');
-      }
-    } catch (err) {
-      setError('Lỗi kết nối khi tạo bài đăng.');
-    } finally {
+    if (failedList.length === 0) {
+      setScheduleSuccess(true);
+      // Chuyển hướng sang trang quản lý bài đăng sau 1.5 giây
+      setTimeout(() => {
+        router.push('/posts');
+      }, 1500);
+    } else {
+      setError(`Đã tạo thành công cho ${successCount} kênh. Thất bại trên ${failedList.length} kênh: ${failedList.join(', ')}`);
       setIsScheduling(false);
     }
   };
@@ -183,11 +292,11 @@ export default function DownloadPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: downloadedVideo ? '1.1fr 0.9fr' : '1fr', gap: '30px', alignItems: 'start', transition: '0.3s' }}>
-        
+
         {/* Khung nhập URL và Tải về */}
         <div className="glass-card">
           <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', fontWeight: 700 }}>Nhập Liên Kết Video</h3>
-          
+
           <form onSubmit={handleDownload}>
             <div className="form-group" style={{ marginBottom: '20px' }}>
               <label className="form-label">Link video (TikTok, YouTube Shorts, Facebook Reels...)</label>
@@ -200,8 +309,34 @@ export default function DownloadPage() {
                   onChange={(e) => setTiktokUrl(e.target.value)}
                   disabled={isDownloading || isScheduling}
                   required
-                  style={{ paddingRight: '76px' }}
+                  style={{ paddingRight: '108px' }}
                 />
+                {/* Icon cài đặt vị trí lưu video */}
+                <button
+                  type="button"
+                  title="Cài đặt thư mục lưu video"
+                  disabled={isDownloading || isScheduling}
+                  onClick={() => setShowFolderModal(true)}
+                  style={{
+                    position: 'absolute',
+                    right: '72px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    color: customUploadsDir ? 'var(--secondary)' : 'rgba(255,255,255,0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: '0.2s',
+                    borderRadius: '4px'
+                  }}
+                  onMouseEnter={e => { if (!isDownloading && !isScheduling) e.currentTarget.style.color = 'var(--secondary)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = customUploadsDir ? 'var(--secondary)' : 'rgba(255,255,255,0.4)'; e.currentTarget.style.background = 'none'; }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                  </svg>
+                </button>
                 {/* Icon Paste từ clipboard */}
                 <button
                   type="button"
@@ -236,10 +371,10 @@ export default function DownloadPage() {
                 >
                   {/* Clipboard paste icon */}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                    <line x1="9" y1="12" x2="15" y2="12"/>
-                    <line x1="9" y1="16" x2="13" y2="16"/>
+                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+                    <line x1="9" y1="12" x2="15" y2="12" />
+                    <line x1="9" y1="16" x2="13" y2="16" />
                   </svg>
                 </button>
                 {/* Icon Clear - xóa nội dung ô input */}
@@ -267,9 +402,9 @@ export default function DownloadPage() {
                 >
                   {/* X circle icon */}
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="15" y1="9" x2="9" y2="15"/>
-                    <line x1="9" y1="9" x2="15" y2="15"/>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="15" y1="9" x2="9" y2="15" />
+                    <line x1="9" y1="9" x2="15" y2="15" />
                   </svg>
                 </button>
               </div>
@@ -296,28 +431,68 @@ export default function DownloadPage() {
             </button>
           </form>
 
+          {/* Hiển thị Video sau khi tải xong */}
+          {downloadedVideo && (
+            <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '24px' }}>
+              <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: 'var(--secondary)' }}>
+                ✓ Đã tải thành công video không logo!
+              </h4>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <video
+                  src={`/api/videos/${downloadedVideo.videoFilename}`}
+                  controls
+                  width="100%"
+                  style={{ maxHeight: '400px', borderRadius: '12px', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <span>Tên tệp lưu: <code>{downloadedVideo.videoFilename}</code></span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Danh sách video đã tải gần đây */}
           {recentDownloads.length > 0 && (() => {
             const totalPages = Math.ceil(recentDownloads.length / HISTORY_PER_PAGE);
-            const visibleDownloads = recentDownloads.slice(0, historyPage * HISTORY_PER_PAGE);
-            const hasMore = historyPage < totalPages;
+            const startIndex = (historyPage - 1) * HISTORY_PER_PAGE;
+            const visibleDownloads = recentDownloads.slice(startIndex, startIndex + HISTORY_PER_PAGE);
 
             return (
               <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--secondary)' }}>
-                    Video Đã Tải Gần Đây ({visibleDownloads.length}/{recentDownloads.length}):
+                    Video Đã Tải Gần Đây (Tổng {recentDownloads.length} video):
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleClearHistory}
-                    style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: '0.75rem', cursor: 'pointer', opacity: 0.7 }}
-                  >
-                    Xóa lịch sử
-                  </button>
+                  {totalPages > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryPage(prev => Math.max(prev - 1, 1))}
+                        disabled={historyPage === 1}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px', opacity: historyPage === 1 ? 0.4 : 1 }}
+                      >
+                        ◀
+                      </button>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        Trang {historyPage} / {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryPage(prev => Math.min(prev + 1, totalPages))}
+                        disabled={historyPage === totalPages}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '6px', opacity: historyPage === totalPages ? 0.4 : 1 }}
+                      >
+                        ▶
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px' }}>
                   {visibleDownloads.map((dl, i) => {
                     const isYt = dl.url.includes('youtube.com') || dl.url.includes('youtu.be');
                     const isFb = dl.url.includes('facebook.com') || dl.url.includes('fb.watch') || dl.url.includes('fb.gg');
@@ -374,11 +549,11 @@ export default function DownloadPage() {
                             transition: 'opacity 0.2s',
                             opacity: 0
                           }}
-                          onMouseEnter={e => e.currentTarget.style.opacity = 1}
-                          onMouseLeave={e => e.currentTarget.style.opacity = 0}
+                            onMouseEnter={e => e.currentTarget.style.opacity = 1}
+                            onMouseLeave={e => e.currentTarget.style.opacity = 0}
                           >
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <polygon points="5 3 19 12 5 21 5 3" fill="#fff" stroke="#fff"/>
+                              <polygon points="5 3 19 12 5 21 5 3" fill="#fff" stroke="#fff" />
                             </svg>
                           </div>
                         </div>
@@ -416,68 +591,85 @@ export default function DownloadPage() {
                   })}
                 </div>
 
-                {/* Nút Xem thêm */}
-                {hasMore && (
-                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+                {/* Điều khiển phân trang */}
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                     <button
                       type="button"
-                      onClick={() => setHistoryPage(p => p + 1)}
+                      onClick={() => setHistoryPage(prev => Math.max(prev - 1, 1))}
+                      disabled={historyPage === 1}
                       style={{
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '8px',
-                        color: 'var(--secondary)',
-                        fontWeight: 600,
+                        padding: '6px 12px',
                         fontSize: '0.8rem',
-                        padding: '8px 20px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'rgba(255,255,255,0.02)',
+                        color: '#fff',
+                        cursor: historyPage === 1 ? 'not-allowed' : 'pointer',
+                        opacity: historyPage === 1 ? 0.4 : 1,
+                        transition: '0.2s'
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(37,244,238,0.08)'; e.currentTarget.style.borderColor = 'var(--secondary)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
                     >
-                      Xem thêm ({recentDownloads.length - visibleDownloads.length} video còn lại)
+                      ◀ Trước
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        type="button"
+                        onClick={() => setHistoryPage(page)}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '0.8rem',
+                          borderRadius: '6px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: historyPage === page ? 'linear-gradient(135deg, var(--secondary), var(--primary))' : 'rgba(255,255,255,0.02)',
+                          color: '#fff',
+                          fontWeight: historyPage === page ? 'bold' : 'normal',
+                          cursor: 'pointer',
+                          transition: '0.2s'
+                        }}
+                      >
+                        {page}
+                      </button>
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={() => setHistoryPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={historyPage === totalPages}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'rgba(255,255,255,0.02)',
+                        color: '#fff',
+                        cursor: historyPage === totalPages ? 'not-allowed' : 'pointer',
+                        opacity: historyPage === totalPages ? 0.4 : 1,
+                        transition: '0.2s'
+                      }}
+                    >
+                      Sau ▶
                     </button>
                   </div>
                 )}
               </div>
             );
           })()}
-
-          {/* Hiển thị Video sau khi tải xong */}
-          {downloadedVideo && (
-            <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '24px' }}>
-              <h4 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px', color: 'var(--secondary)' }}>
-                ✓ Đã tải thành công video không logo!
-              </h4>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <video 
-                  src={`/api/videos/${downloadedVideo.videoFilename}`} 
-                  controls 
-                  width="100%" 
-                  style={{ maxHeight: '400px', borderRadius: '12px', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}
-                />
-                
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  <span>Tên tệp lưu: <code>{downloadedVideo.videoFilename}</code></span>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Khung tạo bài đăng Reup (Chỉ hiển thị khi đã tải xong video) */}
         {downloadedVideo && (
           <div className="glass-card" style={{ animation: 'fadeIn 0.3s ease' }}>
             <h3 style={{ fontSize: '1.25rem', marginBottom: '16px', fontWeight: 700 }}>Đăng Video Lên Kênh</h3>
-            
+
             {accounts.length === 0 ? (
               <div style={{ padding: '20px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '12px' }}>
                   Bạn chưa liên kết tài khoản YouTube Shorts nào để đăng clip.
                 </p>
-                <button 
+                <button
                   onClick={() => router.push('/accounts')}
                   className="btn btn-secondary"
                   style={{ padding: '8px 16px', fontSize: '0.85rem' }}
@@ -488,21 +680,181 @@ export default function DownloadPage() {
             ) : (
               <form onSubmit={handleCreatePost}>
                 <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label className="form-label">Chọn tài khoản đăng bài</label>
-                  <select
-                    className="form-control"
-                    value={selectedAccountId}
-                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Chọn tài khoản đăng bài ({selectedAccountIds.length} đã chọn)</span>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAccountIds(accounts.filter(a => !getLimitTimeLeft(a.uploadLimitReachedAt)).map(a => a.id))}
+                        style={{ background: 'none', border: 'none', color: 'var(--secondary)', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}
+                      >
+                        Chọn tất cả
+                      </button>
+                      <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.2)' }}>|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAccountIds([])}
+                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.72rem', cursor: 'pointer', padding: 0 }}
+                      >
+                        Bỏ chọn tất cả
+                      </button>
+                    </div>
+                  </label>
+
+                  <div style={{
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    background: 'rgba(0,0,0,0.2)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px'
+                  }}>
+                    {Object.entries(
+                      accounts.reduce((groups, acc) => {
+                        const cat = acc.category || 'Chưa phân loại';
+                        if (!groups[cat]) groups[cat] = [];
+                        groups[cat].push(acc);
+                        return groups;
+                      }, {})
+                    ).map(([cat, channelList]) => {
+                      const activeChannels = channelList.filter(ch => !getLimitTimeLeft(ch.uploadLimitReachedAt));
+                      const allActiveChecked = activeChannels.length > 0 && activeChannels.every(ch => selectedAccountIds.includes(ch.id));
+
+                      const handleToggleGroup = () => {
+                        if (allActiveChecked) {
+                          setSelectedAccountIds(prev => prev.filter(id => !activeChannels.some(ch => ch.id === id)));
+                        } else {
+                          setSelectedAccountIds(prev => {
+                            const newIds = activeChannels.map(ch => ch.id).filter(id => !prev.includes(id));
+                            return [...prev, ...newIds];
+                          });
+                        }
+                      };
+
+                      return (
+                        <div key={cat} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--secondary)', fontWeight: 700 }}>
+                              📁 {cat}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleToggleGroup}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.68rem', cursor: 'pointer', padding: 0 }}
+                            >
+                              {allActiveChecked ? 'Bỏ chọn nhóm' : 'Chọn cả nhóm'}
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '6px', paddingLeft: '8px' }}>
+                            {channelList.map(acc => {
+                              const limitTimeLeft = getLimitTimeLeft(acc.uploadLimitReachedAt);
+                              const isLimited = !!limitTimeLeft;
+                              const checked = selectedAccountIds.includes(acc.id);
+                              return (
+                                <label key={acc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: isLimited ? 'not-allowed' : 'pointer', fontSize: '0.8rem' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked && !isLimited}
+                                    disabled={isLimited}
+                                    onChange={() => {
+                                      if (checked) {
+                                        setSelectedAccountIds(prev => prev.filter(id => id !== acc.id));
+                                      } else {
+                                        setSelectedAccountIds(prev => [...prev, acc.id]);
+                                      }
+                                    }}
+                                    style={{ width: '14px', height: '14px', accentColor: 'var(--primary)', cursor: isLimited ? 'not-allowed' : 'pointer' }}
+                                  />
+                                  <span style={{
+                                    color: isLimited ? 'var(--danger)' : checked ? '#fff' : 'var(--text-muted)',
+                                    textDecoration: isLimited ? 'line-through' : 'none',
+                                    opacity: isLimited ? 0.75 : 1
+                                  }}>
+                                    {acc.label} ({acc.username})
+                                    <span style={{ fontSize: '0.7rem', opacity: 0.6 }}> [{acc.type === 'adspower' ? 'AdsPower' : 'Thường'}]</span>
+                                    {isLimited && <strong style={{ color: 'var(--danger)', marginLeft: '6px' }}>[⚠️ Đạt giới hạn - Còn {limitTimeLeft}]</strong>}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Thumbnail (ảnh thu nhỏ) */}
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label className="form-label">
+                    Ảnh Thu Nhỏ / Thumbnail (Tùy chọn)
+                  </label>
+
+                  {thumbnailPreview ? (
+                    <div style={{ position: 'relative', display: 'inline-block', width: '100%', maxWidth: '200px' }}>
+                      <img
+                        src={thumbnailPreview}
+                        alt="Thumbnail Preview"
+                        style={{
+                          width: '100%',
+                          maxHeight: '110px',
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          display: 'block'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={removeThumbnail}
+                        style={{
+                          position: 'absolute', top: '6px', right: '6px',
+                          background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
+                          width: '24px', height: '24px', display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', cursor: 'pointer', color: '#fff', fontSize: '14px'
+                        }}
+                        disabled={isScheduling}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => !isScheduling && thumbnailInputRef.current?.click()}
+                      style={{
+                        border: '2px dashed rgba(255,255,255,0.1)',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: isScheduling ? 'not-allowed' : 'pointer',
+                        background: 'rgba(255,255,255,0.02)',
+                        transition: '0.2s'
+                      }}
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.45 }}>
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                      </svg>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        Nhấn để chọn ảnh thumbnail
+                      </span>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    ref={thumbnailInputRef}
+                    onChange={handleThumbnailChange}
                     disabled={isScheduling}
-                    style={{ background: 'var(--card-bg)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}
-                    required
-                  >
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.label} ({acc.username}) [{acc.type === 'adspower' ? 'AdsPower' : 'Mặc định'}]
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '16px' }}>
@@ -539,7 +891,7 @@ export default function DownloadPage() {
                   type="submit"
                   className="btn btn-secondary"
                   style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, var(--secondary), var(--primary))', border: 'none', color: '#fff', fontWeight: 700 }}
-                  disabled={isScheduling}
+                  disabled={isScheduling || selectedAccountIds.length === 0}
                 >
                   {isScheduling ? 'Đang tạo bài đăng...' : (scheduledAt ? 'Lên Lịch Hẹn Giờ Reup' : 'Đăng Ngay Lập Tức')}
                 </button>
@@ -626,14 +978,14 @@ export default function DownloadPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <p style={{ 
-                    fontSize: '0.88rem', 
-                    fontWeight: 600, 
-                    color: '#eee', 
-                    display: '-webkit-box', 
-                    WebkitLineClamp: 3, 
-                    WebkitBoxOrient: 'vertical', 
-                    overflow: 'hidden', 
+                  <p style={{
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                    color: '#eee',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
                     margin: 0,
                     lineHeight: '1.3'
                   }}>
@@ -675,12 +1027,12 @@ export default function DownloadPage() {
                     cover: selectedHistoryItem.cover
                   });
                   setReupCaption(selectedHistoryItem.caption || '');
-                  
+
                   // Đóng modal
                   setShowOptionsModal(false);
                   setSelectedHistoryItem(null);
                   setShowVideoPlayer(false);
-                  
+
                   // Cuộn xuống Form đăng bài
                   setTimeout(() => {
                     window.scrollTo({ top: 300, behavior: 'smooth' });
@@ -694,7 +1046,138 @@ export default function DownloadPage() {
           </div>
         </div>
       )}
-      
+
+      {/* Modal Cấu hình thư mục lưu video */}
+      {showFolderModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass-card" style={{
+            width: '90%',
+            maxWidth: '500px',
+            padding: '24px',
+            borderRadius: '16px',
+            border: '1px solid rgba(255,255,255,0.08)',
+            position: 'relative',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            background: 'rgba(23, 23, 28, 0.95)'
+          }}>
+            {/* Nút đóng */}
+            <button
+              onClick={() => {
+                setShowFolderModal(false);
+                setSettingsMessage('');
+              }}
+              style={{
+                position: 'absolute',
+                top: '14px',
+                right: '14px',
+                background: 'rgba(255,255,255,0.08)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '28px',
+                height: '28px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: '#fff',
+                transition: '0.2s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            >
+              ×
+            </button>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '16px', color: 'var(--secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📂 Thư Mục Lưu Trữ Video
+            </h3>
+
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: '1.5' }}>
+              Chỉ định thư mục bạn muốn phần mềm tự động tải video về máy tính. 
+              Mặc định video sẽ được lưu tại thư mục <code>data/uploads</code>.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <span>Đường dẫn tuyệt đối trên máy tính:</span>
+                <button
+                  type="button"
+                  onClick={handleOpenFolder}
+                  className="btn btn-secondary"
+                  style={{ padding: '2px 8px', fontSize: '0.72rem', height: 'auto', cursor: 'pointer' }}
+                >
+                  Mở thư mục hiện tại
+                </button>
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Ví dụ: D:\VideoTiktok (Để trống để dùng mặc định)"
+                  value={customUploadsDir}
+                  onChange={(e) => setCustomUploadsDir(e.target.value)}
+                  style={{ fontSize: '0.85rem', flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={handleSelectFolder}
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 14px', fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  🔍 Chọn thư mục
+                </button>
+              </div>
+            </div>
+
+            {settingsMessage && (
+              <div style={{
+                fontSize: '0.8rem',
+                color: settingsMessage.startsWith('Lỗi') ? '#ff4757' : '#2ed573',
+                marginBottom: '16px',
+                fontWeight: 600
+              }}>
+                {settingsMessage}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowFolderModal(false);
+                  setSettingsMessage('');
+                }}
+                style={{ padding: '10px 20px', fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveSettings}
+                style={{ padding: '10px 20px', fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                Lưu cài đặt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         @keyframes spin {
           to { transform: rotate(360deg); }

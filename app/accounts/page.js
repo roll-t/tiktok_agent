@@ -38,6 +38,19 @@ export default function AccountsPage() {
   const [categoriesList, setCategoriesList] = useState([]);
   const [newCatInput, setNewCatInput] = useState('');
 
+  // Trạng thái sửa danh mục
+  const [editingCategoryName, setEditingCategoryName] = useState(null);
+  const [editCategoryNameInput, setEditCategoryNameInput] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+
+  const getLimitTimeLeft = (reachedAt) => {
+    if (!reachedAt) return null;
+    const diff = new Date(reachedAt).getTime() + (24 * 60 * 60 * 1000) - Date.now();
+    if (diff <= 0) return null;
+    const hours = Math.ceil(diff / (1000 * 60 * 60));
+    return `${hours}h`;
+  };
+
   const fetchAccounts = async () => {
     try {
       const res = await fetch('/api/accounts');
@@ -106,6 +119,37 @@ export default function AccountsPage() {
       }
     } catch (err) {
       alert('Đã xảy ra lỗi khi xóa danh mục.');
+    }
+  };
+
+  const handleEditCategory = async (oldName) => {
+    const newName = editCategoryNameInput.trim();
+    if (!newName || newName === oldName) {
+      setEditingCategoryName(null);
+      return;
+    }
+
+    setIsSavingCategory(true);
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ oldName, newName })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setEditingCategoryName(null);
+        fetchCategories();
+        fetchAccounts(); // Tải lại danh sách kênh để cập nhật bộ lọc và category của tài khoản
+      } else {
+        alert(data.error || 'Lỗi khi cập nhật danh mục.');
+      }
+    } catch (err) {
+      alert('Đã xảy ra lỗi khi cập nhật danh mục.');
+    } finally {
+      setIsSavingCategory(false);
     }
   };
 
@@ -541,40 +585,105 @@ export default function AccountsPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                {existingCategories.map(cat => (
-                  <div
-                    key={cat}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '8px 12px',
-                      background: 'rgba(255,255,255,0.02)',
-                      border: '1px solid rgba(255,255,255,0.05)',
-                      borderRadius: '8px',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    <span style={{ color: '#fff', fontWeight: 500 }}>{cat}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteCategory(cat)}
+                {existingCategories.map(cat => {
+                  const count = accounts.filter(a => (a.category || 'Chưa phân loại') === cat).length;
+                  const isEditing = editingCategoryName === cat;
+
+                  return (
+                    <div
+                      key={cat}
                       style={{
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--danger)',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        transition: 'background 0.2s'
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 12px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem'
                       }}
                     >
-                      Xóa
-                    </button>
-                  </div>
-                ))}
+                      {isEditing ? (
+                        <div style={{ display: 'flex', gap: '6px', flex: 1, marginRight: '10px' }}>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={editCategoryNameInput}
+                            onChange={(e) => setEditCategoryNameInput(e.target.value)}
+                            style={{ flex: 1, padding: '4px 8px', fontSize: '0.8rem', height: '28px' }}
+                            disabled={isSavingCategory}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleEditCategory(cat)}
+                            className="btn btn-primary"
+                            style={{ padding: '2px 8px', fontSize: '0.75rem', height: '28px' }}
+                            disabled={isSavingCategory}
+                          >
+                            Lưu
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingCategoryName(null)}
+                            className="btn btn-secondary"
+                            style={{ padding: '2px 8px', fontSize: '0.75rem', height: '28px' }}
+                            disabled={isSavingCategory}
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#fff', fontWeight: 500 }}>
+                          {cat}
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '6px', fontWeight: 'normal' }}>
+                            ({count} kênh)
+                          </span>
+                        </span>
+                      )}
+
+                      {!isEditing && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCategoryName(cat);
+                              setEditCategoryNameInput(cat);
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--secondary)',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCategory(cat)}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--danger)',
+                              cursor: 'pointer',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -891,6 +1000,25 @@ export default function AccountsPage() {
                         </a>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {getLimitTimeLeft(acc.uploadLimitReachedAt) && (
+                            <span
+                              style={{
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                padding: '4px 10px',
+                                borderRadius: '99px',
+                                background: 'rgba(255, 71, 87, 0.15)',
+                                color: 'var(--danger)',
+                                border: '1px solid rgba(255, 71, 87, 0.25)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title={`Tài khoản bị giới hạn đăng tải hằng ngày. Sẽ mở lại sau ${getLimitTimeLeft(acc.uploadLimitReachedAt)}.`}
+                            >
+                              ⚠️ Giới hạn ({getLimitTimeLeft(acc.uploadLimitReachedAt)})
+                            </span>
+                          )}
                           <span
                             style={{
                               fontSize: '0.75rem',

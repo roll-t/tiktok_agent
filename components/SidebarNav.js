@@ -32,6 +32,17 @@ export default function SidebarNav() {
       )
     },
     {
+      href: '/stats',
+      label: 'Thống Kê Kênh',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"></line>
+          <line x1="12" y1="20" x2="12" y2="4"></line>
+          <line x1="6" y1="20" x2="6" y2="14"></line>
+        </svg>
+      )
+    },
+    {
       href: '/download',
       label: 'Tải & Reup Video',
       icon: (
@@ -58,11 +69,14 @@ export default function SidebarNav() {
 
   return (
     <aside className="sidebar-nav">
-      <div className="sidebar-header">
-        <h2 className="gradient-text" style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-          AutoPoster
-        </h2>
-        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>v1.0.0 Alpha</span>
+      <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <img src="/logo.png" alt="AutoPoster Logo" style={{ width: '38px', height: '38px', objectFit: 'contain' }} />
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h2 className="gradient-text" style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, lineHeight: 1.1 }}>
+            AutoPoster
+          </h2>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 600 }}>v1.0.0 Alpha</span>
+        </div>
       </div>
       
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '32px' }}>

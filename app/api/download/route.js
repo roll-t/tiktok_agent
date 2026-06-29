@@ -10,21 +10,30 @@ export async function GET() {
     const downloads = await db.collection('downloads')
       .find({})
       .sort({ createdAt: -1 })
-      .limit(30) // Quét nhiều hơn để phòng trường hợp file cũ bị xóa bởi bộ nhớ 1GB
+      .limit(100) // Quét nhiều hơn để hỗ trợ phân trang video
       .toArray();
 
     const validDownloads = [];
     for (const dl of downloads) {
-      const filePath = path.join(getUploadsDir(), dl.videoFilename);
+      const folder = dl.savePath || getUploadsDir();
+      const filePath = path.join(folder, dl.videoFilename);
+      
       if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
         validDownloads.push({
           url: dl.url,
           videoFilename: dl.videoFilename,
           caption: dl.caption,
           cover: dl.cover,
+          savePath: folder,
           createdAt: dl.createdAt
         });
-        if (validDownloads.length >= 10) break; // Chỉ lấy tối đa 10 tệp hợp lệ
+      } else {
+        // Tự động xóa cache / lịch sử trong DB nếu clip không còn tồn tại trên ổ đĩa
+        try {
+          await db.collection('downloads').deleteOne({ _id: dl._id });
+        } catch (e) {
+          console.error('[API Download GET] Lỗi xóa cache download:', e);
+        }
       }
     }
 
@@ -128,6 +137,7 @@ export async function POST(request) {
           videoFilename,
           caption,
           cover,
+          savePath: getUploadsDir(),
           createdAt: new Date()
         }
       },
