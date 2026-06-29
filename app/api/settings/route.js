@@ -25,7 +25,14 @@ export async function POST(request) {
 
       console.log(`[API Settings] Đang mở thư mục: ${absolutePath}`);
       
-      exec(`explorer.exe "${absolutePath}"`, (err) => {
+      // Chọn lệnh phù hợp theo hệ điều hành
+      const openCommand = process.platform === 'win32'
+        ? `explorer.exe "${absolutePath}"`
+        : process.platform === 'darwin'
+          ? `open "${absolutePath}"`
+          : `xdg-open "${absolutePath}"`;
+
+      exec(openCommand, (err) => {
         if (err) {
           console.error('[API Settings] Lỗi mở thư mục:', err);
         }
@@ -33,10 +40,13 @@ export async function POST(request) {
       return NextResponse.json({ success: true, path: absolutePath });
     }
     if (action === 'select-folder') {
-      const psScriptPath = path.join(process.cwd(), 'data', 'select_folder.ps1');
-      
-      if (!fs.existsSync(psScriptPath)) {
-        const scriptContent = `Add-Type -AssemblyName System.Windows.Forms
+      let selectedPath = null;
+
+      if (process.platform === 'win32') {
+        const psScriptPath = path.join(process.cwd(), 'data', 'select_folder.ps1');
+        
+        if (!fs.existsSync(psScriptPath)) {
+          const scriptContent = `Add-Type -AssemblyName System.Windows.Forms
 $f = New-Object System.Windows.Forms.FolderBrowserDialog
 $f.Description = "Chọn thư mục lưu trữ video"
 $f.ShowNewFolderButton = $true
@@ -44,22 +54,37 @@ $result = $f.ShowDialog()
 if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
     Write-Output $f.SelectedPath
 }`;
-        fs.mkdirSync(path.dirname(psScriptPath), { recursive: true });
-        fs.writeFileSync(psScriptPath, scriptContent);
-      }
+          fs.mkdirSync(path.dirname(psScriptPath), { recursive: true });
+          fs.writeFileSync(psScriptPath, scriptContent);
+        }
 
-      console.log(`[API Settings] Đang kích hoạt hộp thoại chọn thư mục...`);
-      
-      const selectedPath = await new Promise((resolve) => {
-        exec(`powershell -ExecutionPolicy Bypass -File "${psScriptPath}"`, (err, stdout) => {
-          if (err) {
-            console.error('[API Settings] Lỗi chọn thư mục bằng PowerShell:', err);
-            resolve(null);
-          } else {
-            resolve(stdout.trim());
-          }
+        console.log(`[API Settings] Đang kích hoạt hộp thoại chọn thư mục (Windows)...`);
+        selectedPath = await new Promise((resolve) => {
+          exec(`powershell -ExecutionPolicy Bypass -File "${psScriptPath}"`, (err, stdout) => {
+            if (err) {
+              console.error('[API Settings] Lỗi chọn thư mục bằng PowerShell:', err);
+              resolve(null);
+            } else {
+              resolve(stdout.trim());
+            }
+          });
         });
-      });
+      } else if (process.platform === 'darwin') {
+        console.log(`[API Settings] Đang kích hoạt hộp thoại chọn thư mục (macOS)...`);
+        selectedPath = await new Promise((resolve) => {
+          // Sử dụng AppleScript để hiển thị hộp thoại chọn thư mục gốc trên macOS
+          exec(`osascript -e 'POSIX path of (choose folder with prompt "Chọn thư mục lưu trữ video")'`, (err, stdout) => {
+            if (err) {
+              console.error('[API Settings] Lỗi chọn thư mục bằng AppleScript:', err);
+              resolve(null);
+            } else {
+              resolve(stdout.trim());
+            }
+          });
+        });
+      } else {
+        return NextResponse.json({ success: false, error: 'Hệ điều hành hiện tại chưa hỗ trợ chọn thư mục trực tiếp.' });
+      }
 
       if (!selectedPath) {
         return NextResponse.json({ success: false, error: 'Hủy chọn thư mục hoặc có lỗi xảy ra.' });
@@ -76,7 +101,7 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
     if (cleanPath) {
       // Kiểm tra xem có phải đường dẫn tuyệt đối không
       if (!path.isAbsolute(cleanPath)) {
-        return NextResponse.json({ error: 'Đường dẫn phải là đường dẫn tuyệt đối trên Windows (ví dụ: D:\\Videos)' }, { status: 400 });
+        return NextResponse.json({ error: 'Đường dẫn phải là đường dẫn tuyệt đối (ví dụ: /Users/username/Videos hoặc D:\\Videos)' }, { status: 400 });
       }
       try {
         if (!fs.existsSync(cleanPath)) {
