@@ -15,6 +15,10 @@ export default function PostsPage() {
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   const [videoType, setVideoType] = useState('shorts'); // 'shorts' hoặc 'video'
+  const [aiThumbnailFilename, setAiThumbnailFilename] = useState(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [showAiGenInput, setShowAiGenInput] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadPercent, setUploadPercent] = useState(0);
@@ -161,6 +165,7 @@ export default function PostsPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setThumbnailFile(file);
+      setAiThumbnailFilename(null); // Xóa ảnh AI nếu chọn ảnh thủ công
       // Tạo preview
       const reader = new FileReader();
       reader.onload = (ev) => setThumbnailPreview(ev.target.result);
@@ -171,7 +176,32 @@ export default function PostsPage() {
   const removeThumbnail = () => {
     setThumbnailFile(null);
     setThumbnailPreview(null);
+    setAiThumbnailFilename(null); // Xóa ảnh AI
     if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+  };
+
+  const handleGenerateAiImage = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsGeneratingImage(true);
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAiThumbnailFilename(data.filename);
+        setThumbnailPreview(data.url);
+        setThumbnailFile(null); // Xóa ảnh upload thủ công
+      } else {
+        alert(data.error || 'Lỗi khi tạo ảnh AI.');
+      }
+    } catch (err) {
+      alert('Không thể kết nối máy chủ tạo ảnh.');
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -197,6 +227,9 @@ export default function PostsPage() {
     formData.append('videoType', videoType);
     if (thumbnailFile) {
       formData.append('thumbnail', thumbnailFile);
+    }
+    if (aiThumbnailFilename) {
+      formData.append('thumbnailFilename', aiThumbnailFilename);
     }
     if (scheduledAt) {
       formData.append('scheduledAt', new Date(scheduledAt).toISOString());
@@ -236,6 +269,9 @@ export default function PostsPage() {
       setVideoFile(null);
       setThumbnailFile(null);
       setThumbnailPreview(null);
+      setAiThumbnailFilename(null);
+      setAiPrompt('');
+      setShowAiGenInput(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
 
@@ -464,6 +500,69 @@ export default function PostsPage() {
                 onChange={handleThumbnailChange}
                 disabled={isSubmitting}
               />
+
+              {/* AI Image Generator Section */}
+              <div style={{ marginTop: '12px' }}>
+                {!showAiGenInput ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowAiGenInput(true)}
+                    style={{
+                      background: 'linear-gradient(135deg, #7000FF 0%, #F355DA 100%)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#fff',
+                      padding: '6px 12px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 4px 10px rgba(112,0,255,0.3)',
+                      transition: '0.2s'
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    ✨ Tạo Ảnh Thu Nhỏ Bằng AI
+                  </button>
+                ) : (
+                  <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+                      Mô tả hình ảnh (English hoặc Tiếng Việt):
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Ví dụ: A delicious bowl of beef noodles, anime style, 4k..."
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      style={{ padding: '8px 12px', fontSize: '0.82rem', marginBottom: '8px', background: 'var(--card-bg)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}
+                      disabled={isGeneratingImage}
+                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={handleGenerateAiImage}
+                        className="btn btn-primary"
+                        style={{ padding: '6px 14px', fontSize: '0.8rem', background: 'var(--secondary)' }}
+                        disabled={isGeneratingImage || !aiPrompt.trim()}
+                      >
+                        {isGeneratingImage ? 'Đang tạo ảnh...' : 'Bắt đầu Tạo'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAiGenInput(false)}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                        disabled={isGeneratingImage}
+                      >
+                        Hủy
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="form-group">

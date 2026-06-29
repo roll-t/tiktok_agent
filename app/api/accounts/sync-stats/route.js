@@ -163,7 +163,11 @@ async function runBackgroundSync() {
       // Tính toán hashtag
       const topTags = computeTopHashtags(posts, acc.id);
 
-      // Cập nhật lại đối tượng tài khoản
+      // Cập nhật lại đối tượng tài khoản (lưu số liệu cũ để tính tăng trưởng)
+      acc.prevSubscribers = acc.subscribers !== undefined ? acc.subscribers : stats.subscribers;
+      acc.prevViews = acc.views !== undefined ? acc.views : stats.views;
+      acc.prevVideoCount = acc.videoCount !== undefined ? acc.videoCount : stats.videoCount;
+
       acc.subscribers = stats.subscribers;
       acc.views = stats.views;
       acc.videoCount = stats.videoCount;

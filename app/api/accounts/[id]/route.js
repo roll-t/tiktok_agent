@@ -48,7 +48,7 @@ export async function DELETE(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const { id } = await params;
-    const { label, username, email, password, videoType, avatar, category } = await request.json();
+    const { label, username, email, password, videoType, avatar, category, channelUrl } = await request.json();
     const db = await readDb();
     
     const accountIndex = db.accounts.findIndex(a => a.id === id);
@@ -67,6 +67,7 @@ export async function PUT(request, { params }) {
     if (email !== undefined) account.email = email.trim();
     if (password !== undefined) account.password = password.trim();
     if (videoType !== undefined) account.videoType = videoType;
+    if (channelUrl !== undefined) account.channelUrl = channelUrl.trim();
     if (avatar !== undefined) {
       const oldAvatar = account.avatar;
       account.avatar = avatar;

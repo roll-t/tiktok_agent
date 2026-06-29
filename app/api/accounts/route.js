@@ -22,7 +22,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { label, username, email, password, videoType, avatar, category } = await request.json();
+    const { label, username, email, password, videoType, avatar, category, channelUrl } = await request.json();
     if (!label) {
       return NextResponse.json({ error: 'Thiếu tên nhãn kênh.' }, { status: 400 });
     }
@@ -49,7 +49,7 @@ export async function POST(request) {
           status: result.status,
           sessionFile: `${accountId}.json`,
           avatar: avatar || null,
-          channelUrl: result.channelUrl || null,
+          channelUrl: channelUrl ? channelUrl.trim() : (result.channelUrl || null),
           category: category ? category.trim() : 'Chưa phân loại',
           createdAt: new Date().toISOString()
         };

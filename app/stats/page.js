@@ -59,7 +59,6 @@ function ChannelAvatar({ acc }) {
   );
 }
 
-
 export default function StatsPage() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +98,6 @@ export default function StatsPage() {
           const syncData = await syncRes.json();
           setSyncStatus(syncData.syncStatus);
           
-          // Tải lại danh sách tài khoản để hiển thị số liệu mới nhất
           const accRes = await fetch('/api/accounts');
           const accData = await accRes.json();
           setAccounts(accData.accounts || []);
@@ -159,7 +157,7 @@ export default function StatsPage() {
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + 'K';
     }
-    return num.toString();
+    return num.toLocaleString('vi-VN');
   };
 
   // Định dạng ngày giờ cập nhật
@@ -169,10 +167,61 @@ export default function StatsPage() {
     return date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' ' + date.toLocaleDateString('vi-VN');
   };
 
+  // Thuật toán tính toán Tỷ lệ Đề xuất (%) của kênh dựa trên lượt xem trung bình/video
+  const getRecommendationRate = (views, videoCount) => {
+    const avgViews = views / (videoCount || 1);
+    if (avgViews <= 0) return 5;
+    if (avgViews <= 10) {
+      return Math.round(5 + (avgViews * 1)); // 5% - 15%
+    } else if (avgViews <= 100) {
+      return Math.round(15 + ((avgViews - 10) * 0.28)); // 15% - 40%
+    } else if (avgViews <= 1000) {
+      return Math.round(40 + ((avgViews - 100) * 0.039)); // 40% - 75%
+    } else {
+      return Math.round(Math.min(98, 75 + ((avgViews - 1000) * 0.005))); // 75% - 98%
+    }
+  };
+
   // Tính toán số liệu tổng quan
   const totalSubscribers = accounts.reduce((sum, acc) => sum + (acc.subscribers || 0), 0);
   const totalViews = accounts.reduce((sum, acc) => sum + (acc.views || 0), 0);
   const totalVideos = accounts.reduce((sum, acc) => sum + (acc.videoCount || 0), 0);
+
+  // PHÂN TÍCH INSIGHTS TĂNG TRƯỞNG KÊNH
+  const channelsAnalysis = accounts.map(acc => {
+    const subDelta = (acc.subscribers || 0) - (acc.prevSubscribers || acc.subscribers || 0);
+    const viewDelta = (acc.views || 0) - (acc.prevViews || acc.views || 0);
+    const videoDelta = (acc.videoCount || 0) - (acc.prevVideoCount || acc.videoCount || 0);
+    const recRate = getRecommendationRate(acc.views || 0, acc.videoCount || 0);
+
+    let growthStatus = 'no_change'; // 'strong', 'light', 'no_change'
+    if (viewDelta > 50 || subDelta > 5) {
+      growthStatus = 'strong';
+    } else if (viewDelta > 0 || subDelta > 0) {
+      growthStatus = 'light';
+    }
+
+    return {
+      ...acc,
+      subDelta,
+      viewDelta,
+      videoDelta,
+      recRate,
+      growthStatus
+    };
+  });
+
+  // Tìm kênh đề xuất cao nhất & tăng trưởng nhanh nhất
+  let mostRecommendedChannel = null;
+  let fastestGrowingChannel = null;
+
+  if (channelsAnalysis.length > 0) {
+    mostRecommendedChannel = [...channelsAnalysis].sort((a, b) => b.recRate - a.recRate)[0];
+    const withPositiveGrowth = channelsAnalysis.filter(c => c.viewDelta > 0);
+    if (withPositiveGrowth.length > 0) {
+      fastestGrowingChannel = [...withPositiveGrowth].sort((a, b) => b.viewDelta - a.viewDelta)[0];
+    }
+  }
 
   if (loading) {
     return (
@@ -191,7 +240,7 @@ export default function StatsPage() {
             Thống Kê <span className="gradient-text">Kênh YouTube</span>
           </h1>
           <p style={{ color: 'var(--text-muted)' }}>
-            Theo dõi số đăng ký, lượt xem, video và các chủ đề thịnh hành của tất cả các kênh YouTube trong hệ thống.
+            So sánh biến động tăng trưởng giữa các lần quét và đánh giá tỷ lệ đề xuất dựa trên tương tác video.
           </p>
         </div>
 
@@ -229,7 +278,7 @@ export default function StatsPage() {
       </div>
 
       {/* Khối thống kê tổng quan */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '30px' }}>
         <div className="glass-card" style={{ borderLeft: '4px solid var(--secondary)' }}>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>TỔNG SỐ KÊNH</span>
           <div style={{ fontSize: '2.5rem', fontWeight: 800, marginTop: '8px', color: '#fff' }}>
@@ -256,28 +305,97 @@ export default function StatsPage() {
         </div>
       </div>
 
+      {/* Khối Insights - Báo cáo phân tích tăng trưởng */}
+      {accounts.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+          
+          {/* Cột 1: Kênh đề xuất cao nhất & tăng trưởng nhanh nhất */}
+          <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', justifyContent: 'center' }}>
+            <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>🔥 Phát Hiện Xu Hướng</h4>
+            
+            {mostRecommendedChannel && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ fontSize: '2rem' }}>🎯</div>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Đề xuất cao nhất</div>
+                  <div style={{ fontSize: '0.98rem', fontWeight: 700, color: '#fff' }}>
+                    {mostRecommendedChannel.label} <span style={{ color: 'var(--secondary)' }}>({mostRecommendedChannel.recRate}%)</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {fastestGrowingChannel ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ fontSize: '2rem' }}>⚡</div>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tăng trưởng view nhanh nhất</div>
+                  <div style={{ fontSize: '0.98rem', fontWeight: 700, color: '#fff' }}>
+                    {fastestGrowingChannel.label} <span style={{ color: 'var(--success)' }}>({formatNumber(fastestGrowingChannel.viewDelta)} views)</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ fontSize: '2rem' }}>💤</div>
+                <div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tăng trưởng nhanh nhất</div>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Chưa ghi nhận biến động tăng view trong phiên này</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Cột 2: Trạng thái các kênh */}
+          <div className="glass-card" style={{ padding: '20px' }}>
+            <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '16px' }}>📊 Phân Loại Tăng Trưởng Kênh</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ff4757', fontWeight: 600 }}>🔥 Tăng trưởng mạnh</span>
+                <span style={{ fontWeight: 800, color: '#fff' }}>
+                  {channelsAnalysis.filter(c => c.growthStatus === 'strong').length} kênh
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2ed573', fontWeight: 600 }}>📈 Tăng trưởng nhẹ</span>
+                <span style={{ fontWeight: 800, color: '#fff' }}>
+                  {channelsAnalysis.filter(c => c.growthStatus === 'light').length} kênh
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>➖ Không biến động</span>
+                <span style={{ fontWeight: 800, color: '#fff' }}>
+                  {channelsAnalysis.filter(c => c.growthStatus === 'no_change').length} kênh
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Bảng chi tiết từng kênh */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Chi Tiết Các Kênh</h3>
+        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '20px' }}>Chi Tiết & Biến Động Số Liệu Kênh</h3>
 
         {accounts.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>Chưa có tài khoản kênh nào được liên kết.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '800px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '950px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
                   <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Kênh YouTube</th>
-                  <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Danh Mục</th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Trạng Thái</th>
                   <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Số Đăng Ký</th>
                   <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Lượt Xem Kênh</th>
                   <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Số Video</th>
+                  <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', width: '150px' }}>Tỷ Lệ Đề Xuất</th>
                   <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Chủ Đề (Top Hashtag)</th>
                   <th style={{ textAlign: 'right', padding: '12px 16px', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase' }}>Cập Nhật Cuối</th>
                 </tr>
               </thead>
               <tbody>
-                {accounts.map((acc) => (
+                {channelsAnalysis.map((acc) => (
                   <tr key={acc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: '0.2s' }}>
                     
                     {/* Thông tin kênh */}
@@ -304,33 +422,75 @@ export default function StatsPage() {
                       </div>
                     </td>
 
-                    {/* Danh mục */}
-                    <td style={{ padding: '16px 16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      <span style={{
-                        background: 'rgba(0, 242, 254, 0.08)',
-                        color: '#00f2fe',
-                        padding: '4px 10px',
-                        borderRadius: '6px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600
-                      }}>
-                        {acc.category || 'Chưa phân loại'}
-                      </span>
+                    {/* Trạng thái tăng trưởng */}
+                    <td style={{ padding: '16px 16px', fontSize: '0.85rem' }}>
+                      {acc.growthStatus === 'strong' && (
+                        <span style={{ background: 'rgba(255, 71, 87, 0.08)', color: '#ff4757', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700 }}>
+                          🔥 Tăng mạnh
+                        </span>
+                      )}
+                      {acc.growthStatus === 'light' && (
+                        <span style={{ background: 'rgba(46, 213, 115, 0.08)', color: '#2ed573', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 700 }}>
+                          📈 Tăng nhẹ
+                        </span>
+                      )}
+                      {acc.growthStatus === 'no_change' && (
+                        <span style={{ background: 'rgba(255, 255, 255, 0.04)', color: 'var(--text-muted)', padding: '3px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600 }}>
+                          ➖ Không đổi
+                        </span>
+                      )}
                     </td>
 
-                    {/* Số người đăng ký */}
-                    <td style={{ padding: '16px 16px', textAlign: 'center', fontWeight: 700, fontSize: '0.9rem', color: '#fff' }}>
-                      {formatNumber(acc.subscribers)}
+                    {/* Số người đăng ký (có hiển thị chênh lệch) */}
+                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#fff' }}>{formatNumber(acc.subscribers)}</span>
+                        {acc.subDelta > 0 && (
+                          <span style={{ fontSize: '0.72rem', color: '#2ed573', fontWeight: 600 }}>▲ +{acc.subDelta}</span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Số lượt xem */}
-                    <td style={{ padding: '16px 16px', textAlign: 'center', fontSize: '0.9rem', color: '#eee' }}>
-                      {formatNumber(acc.views)}
+                    {/* Lượt xem kênh (có hiển thị chênh lệch) */}
+                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#eee' }}>{formatNumber(acc.views)}</span>
+                        {acc.viewDelta > 0 && (
+                          <span style={{ fontSize: '0.72rem', color: '#2ed573', fontWeight: 600 }}>▲ +{formatNumber(acc.viewDelta)}</span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Số lượng video */}
-                    <td style={{ padding: '16px 16px', textAlign: 'center', fontSize: '0.9rem', color: '#eee' }}>
-                      {formatNumber(acc.videoCount)}
+                    {/* Số lượng video (có hiển thị chênh lệch) */}
+                    <td style={{ padding: '16px 16px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', color: '#eee' }}>{formatNumber(acc.videoCount)}</span>
+                        {acc.videoDelta > 0 && (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--secondary)', fontWeight: 600 }}>▲ +{acc.videoDelta}</span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Tỷ Lệ Đề Xuất */}
+                    <td style={{ padding: '16px 16px', verticalAlign: 'middle' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: acc.recRate > 50 ? 'var(--secondary)' : 'var(--text-muted)' }}>
+                          {acc.recRate}% {acc.recRate > 75 ? '🔥' : acc.recRate > 40 ? '👍' : ''}
+                        </span>
+                        {/* Thanh progress bar */}
+                        <div style={{ width: '100%', height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${acc.recRate}%`,
+                            height: '100%',
+                            background: acc.recRate > 75 
+                              ? 'linear-gradient(90deg, #F355DA 0%, #7000FF 100%)' 
+                              : acc.recRate > 40 
+                              ? 'linear-gradient(90deg, #00F2FE 0%, #4FACFE 100%)'
+                              : 'linear-gradient(90deg, #a4b0be 0%, #747d8c 100%)',
+                            borderRadius: '3px'
+                          }}></div>
+                        </div>
+                      </div>
                     </td>
 
                     {/* Top Hashtags */}

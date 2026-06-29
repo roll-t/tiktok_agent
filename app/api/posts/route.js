@@ -71,7 +71,7 @@ export async function POST(request) {
     }
 
     // Lưu thumbnail nếu có
-    let thumbnailFilename = null;
+    let thumbnailFilename = formData.get('thumbnailFilename') || null;
     if (thumbnailFile && thumbnailFile.size > 0) {
       const thumbBytes = await thumbnailFile.arrayBuffer();
       const thumbBuffer = Buffer.from(thumbBytes);

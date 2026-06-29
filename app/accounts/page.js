@@ -13,7 +13,8 @@ export default function AccountsPage() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [videoType, setVideoType] = useState('shorts'); // 'shorts' hoặc 'video'
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState('11172002dZ');
+  const [channelUrl, setChannelUrl] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -26,6 +27,7 @@ export default function AccountsPage() {
   const [editUsername, setEditUsername] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [editChannelUrl, setEditChannelUrl] = useState('');
   const [editCategoryOption, setEditCategoryOption] = useState('');
   const [editNewCategoryName, setEditNewCategoryName] = useState('');
   const [editVideoType, setEditVideoType] = useState('shorts');
@@ -192,6 +194,11 @@ export default function AccountsPage() {
 
     const finalCategory = categoryOption === '__NEW__' ? (newCategoryName.trim() || 'Chưa phân loại') : (categoryOption || 'Chưa phân loại');
 
+    let processedEmail = email.trim();
+    if (processedEmail && !processedEmail.includes('@')) {
+      processedEmail += '@gmail.com';
+    }
+
     try {
       const res = await fetch('/api/accounts', {
         method: 'POST',
@@ -203,13 +210,14 @@ export default function AccountsPage() {
           type: 'local',
           cookie: '',
           username: usernameVal.trim(),
-          email: email.trim(),
+          email: processedEmail,
           password: password.trim(),
           profileId: '',
           platform: 'youtube',
           videoType: videoType,
           avatar: avatar,
-          category: finalCategory
+          category: finalCategory,
+          channelUrl: channelUrl.trim()
         })
       });
 
@@ -235,7 +243,8 @@ export default function AccountsPage() {
               setLabel('');
               setUsernameVal('');
               setEmail('');
-              setPassword('');
+              setPassword('11172002dZ');
+              setChannelUrl('');
               setCategoryOption('');
               setNewCategoryName('');
               setAvatar(null);
@@ -268,6 +277,7 @@ export default function AccountsPage() {
     setEditUsername(acc.username);
     setEditEmail(acc.email || '');
     setEditPassword(acc.password || '');
+    setEditChannelUrl(acc.channelUrl || '');
     setEditCategoryOption(acc.category || 'Chưa phân loại');
     setEditNewCategoryName('');
     setEditVideoType(acc.videoType || 'shorts');
@@ -281,6 +291,11 @@ export default function AccountsPage() {
     setIsSavingEdit(true);
     const finalEditCategory = editCategoryOption === '__NEW__' ? (editNewCategoryName.trim() || 'Chưa phân loại') : (editCategoryOption || 'Chưa phân loại');
 
+    let processedEditEmail = editEmail.trim();
+    if (processedEditEmail && !processedEditEmail.includes('@')) {
+      processedEditEmail += '@gmail.com';
+    }
+
     try {
       const res = await fetch(`/api/accounts/${id}`, {
         method: 'PUT',
@@ -290,11 +305,12 @@ export default function AccountsPage() {
         body: JSON.stringify({
           label: editUsername.trim(),
           username: editUsername.trim(),
-          email: editEmail.trim(),
+          email: processedEditEmail,
           password: editPassword.trim(),
           category: finalEditCategory,
           videoType: editVideoType,
-          avatar: editAvatar
+          avatar: editAvatar,
+          channelUrl: editChannelUrl.trim()
         })
       });
 
@@ -427,6 +443,12 @@ export default function AccountsPage() {
                     placeholder="example@gmail.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val && !val.includes('@')) {
+                        setEmail(val + '@gmail.com');
+                      }
+                    }}
                     disabled={isLoggingIn}
                   />
                 </div>
@@ -441,6 +463,18 @@ export default function AccountsPage() {
                     disabled={isLoggingIn}
                   />
                 </div>
+              </div>
+
+              <div className="form-group" style={{ marginTop: '16px' }}>
+                <label className="form-label">Đường Dẫn Kênh YouTube (URL - Tùy chọn)</label>
+                <input
+                  type="url"
+                  className="form-control"
+                  placeholder="https://www.youtube.com/@tenkenh"
+                  value={channelUrl}
+                  onChange={(e) => setChannelUrl(e.target.value)}
+                  disabled={isLoggingIn}
+                />
               </div>
 
               <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px', lineHeight: '1.3' }}>
@@ -860,6 +894,12 @@ export default function AccountsPage() {
                                 style={{ padding: '8px 12px', fontSize: '0.85rem' }}
                                 value={editEmail}
                                 onChange={(e) => setEditEmail(e.target.value)}
+                                onBlur={(e) => {
+                                  const val = e.target.value.trim();
+                                  if (val && !val.includes('@')) {
+                                    setEditEmail(val + '@gmail.com');
+                                  }
+                                }}
                                 disabled={isSavingEdit}
                               />
                             </div>
@@ -874,6 +914,19 @@ export default function AccountsPage() {
                                 disabled={isSavingEdit}
                               />
                             </div>
+                          </div>
+
+                          <div className="form-group" style={{ marginTop: '12px' }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', marginBottom: '4px' }}>Đường Dẫn Kênh YouTube (URL)</label>
+                            <input
+                              type="url"
+                              className="form-control"
+                              style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                              placeholder="https://www.youtube.com/@tenkenh"
+                              value={editChannelUrl}
+                              onChange={(e) => setEditChannelUrl(e.target.value)}
+                              disabled={isSavingEdit}
+                            />
                           </div>
 
                           <div className="form-group" style={{ marginTop: '12px', marginBottom: 0 }}>
